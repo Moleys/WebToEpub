@@ -24,6 +24,20 @@ class PatreonParser extends Parser {
                 .join(" ");
         };
 
+        if (this.isCondensedView(dom))
+        {
+            let getLink = (e) => {
+                return e.querySelector("a");
+            };
+            let linksContainer = [...dom.querySelectorAll("div.cm-hhCVrV.cm-WzHHbB div.cm-bkNQIo:not(:has(svg[data-tag='IconLock'])) div:not([class])")];
+            return linksContainer.map(linkContainer => {
+                return {
+                    sourceUrl: getLink(linkContainer).href,
+                    title: getTitle(linkContainer),
+                };
+            });
+        }
+        
         let links = [...dom.querySelectorAll("a.cm-XHOpxu")];
         return links.map(link => ({
             sourceUrl: link.href,
@@ -91,12 +105,24 @@ class PatreonParser extends Parser {
                         let current = root;
                         node.marks.forEach(mark => {
                             let wrapper;
-                            if (mark.type === "bold") wrapper = document.createElement("strong");
-                            if (mark.type === "italic") wrapper = document.createElement("em");
-                            if (mark.type === "link") {
-                                wrapper = document.createElement("a");
-                                wrapper.href = mark.attrs.href;
-                                wrapper.target = mark.attrs.target;
+                            switch (mark.type) {
+                                case "bold":
+                                    wrapper = document.createElement("strong");
+                                    break;
+                                case "italic":
+                                    wrapper = document.createElement("em");
+                                    break;
+                                case "underline":
+                                    wrapper = document.createElement("u");
+                                    break;
+                                case "link":
+                                    wrapper = document.createElement("a");
+                                    wrapper.href = mark.attrs.href;
+                                    wrapper.target = mark.attrs.target;
+                                    break;
+                                default:
+                                    wrapper = document.createElement("span");
+                                    console.error(`Unsupported mark type: "${mark.type}"`);
                             }
                             current.appendChild(wrapper);
                             current = wrapper;
@@ -233,5 +259,10 @@ class PatreonParser extends Parser {
 
     isCollectionList(dom) {
         return new URL(dom.baseURI).pathname.startsWith("/collection/");
+    }
+
+    isCondensedView(dom) {
+        let url = new URL(dom.baseURI);
+        return url.searchParams.get("view") === "condensed";
     }
 }
