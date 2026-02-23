@@ -1,7 +1,7 @@
 <!-- PROJECT LOGO -->
 <div align="center">
   <a href="https://github.com/dteviot/WebToEpub">
-    <img src="doc/logo.png" alt="WebToEpub Logo" width="80" height="80">
+    <img src="https://raw.githubusercontent.com/dteviot/WebToEpub/ExperimentalTabMode/doc/logo.png" alt="WebToEpub Logo" width="80" height="80">
   </a>
 
   <h3 align="center">WebToEpub (Personal Fork)</h3>
