@@ -224,6 +224,7 @@ var main = (function() {
     }
 
     function getActiveTabDOM(tabId) {
+        HttpClient.setActiveTabId(tabId);
         addMessageListener();
         injectContentScript(tabId);
     }

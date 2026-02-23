@@ -1,6 +1,6 @@
 "use strict";
 
-parserFactory.registerDeadSite("trxs.me", () => new TrxsParser());
+parserFactory.register("trxs.me", () => new TrxsParser());
 parserFactory.register("trxs.cc", () => new TrxsParser());
 parserFactory.register("tongrenshe.cc", () => new TrxsParser());
 

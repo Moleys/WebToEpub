@@ -9,3 +9,7 @@ package-lock.json
 .vscode
 /plugin/dompurify/
 /plugin/@zip.js/
+/temp/
+plugin/js/parsers/TomatoMtlParser.js
+TODO.MD
+doc

@@ -63,10 +63,28 @@ class _69yueduParser extends ShuParser {
     }
 
     async getChapterUrls(dom) {
-        let tocUrl = dom.querySelector("a.btn").href;
+        let tocUrl = this.findTocUrl(dom);
+        if (util.isNullOrEmpty(tocUrl)) {
+            return [];
+        }
         let toc = (await HttpClient.wrapFetch(tocUrl, this.makeOptions())).responseXML;
         let menu = toc.querySelector("#chapters ul");
-        return util.hyperlinksToChapterList(menu);
+        if (menu != null) {
+            return util.hyperlinksToChapterList(menu);
+        }
+        menu = toc.querySelector("#catalog ul");
+        if (menu != null) {
+            return util.hyperlinksToChapterList(menu).reverse();
+        }
+        return [];
+    }
+
+    findTocUrl(dom) {
+        let tocLink = dom.querySelector(".addbtn a.btn[href^='/chapters/']")
+            || dom.querySelector(".addbtn a.btn[href]")
+            || dom.querySelector("a.btn[href]")
+            || dom.querySelector("a.more-btn[href]");
+        return tocLink ? tocLink.href : null;
     }
 
     makeOptions() {
@@ -80,6 +98,37 @@ class _69yueduParser extends ShuParser {
     }
 
     findContent(dom) {
-        return dom.querySelector("div.content");
+        return dom.querySelector("div.content") || dom.querySelector("div.txtnav");
     }
+
+    removeUnwantedElementsFromContentElement(element) {
+        if (element != null) {
+            util.removeChildElementsMatchingSelector(element, ".txtright, .bottom-ad");
+            wrapTextNodesInParagraphs(element);
+        }
+        super.removeUnwantedElementsFromContentElement(element);
+    }
+}
+
+function wrapTextNodesInParagraphs(content) {
+    let walker = content.ownerDocument.createTreeWalker(
+        content,
+        NodeFilter.SHOW_TEXT,
+        null
+    );
+    let nodesToReplace = [];
+    while (walker.nextNode()) {
+        let node = walker.currentNode;
+        if (node.parentNode && node.parentNode.nodeName !== "P") {
+            let text = node.textContent || "";
+            if (text.trim() !== "") {
+                nodesToReplace.push(node);
+            }
+        }
+    }
+    nodesToReplace.forEach(node => {
+        let p = content.ownerDocument.createElement("p");
+        p.textContent = node.textContent || "";
+        node.parentNode.replaceChild(p, node);
+    });
 }

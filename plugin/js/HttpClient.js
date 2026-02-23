@@ -152,6 +152,20 @@ class HttpClient {
         return { credentials: "include" };
     }
 
+    static setActiveTabId(tabId) {
+        HttpClient.activeTabId = tabId;
+    }
+
+    static async fetchIframeDom(url, options) {
+        if (HttpClient.activeTabId == null) {
+            throw new Error("Active tab id not set for iframe fetch");
+        }
+        if (typeof IframeFetchManager === "undefined") {
+            throw new Error("IframeFetchManager not available");
+        }
+        return IframeFetchManager.requestIframeDom(HttpClient.activeTabId, url, options);
+    }
+
     static wrapFetch(url, wrapOptions) {
         if (wrapOptions == null) {
             wrapOptions = {
@@ -307,7 +321,7 @@ class FetchResponseHandler {
 
     responseToHtml(response) {
         return response.arrayBuffer().then(function(rawBytes) {
-            let data = this.makeTextDecoder(response).decode(rawBytes);
+            let data = this.makeTextDecoder(response, rawBytes).decode(rawBytes);
             let html = new DOMParser().parseFromString(data, "text/html");
             util.setBaseTag(this.response.url, html);
             this.responseXML = html;
@@ -324,7 +338,7 @@ class FetchResponseHandler {
 
     responseToText(response) {
         return response.arrayBuffer().then(function(rawBytes) {
-            return this.makeTextDecoder(response).decode(rawBytes);
+            return this.makeTextDecoder(response, rawBytes).decode(rawBytes);
         }.bind(this));
     }
 
@@ -335,9 +349,32 @@ class FetchResponseHandler {
         }.bind(this));
     }
 
-    makeTextDecoder(response) {
-        let utflabel = this.charsetFromHeaders(response.headers);
-        return new TextDecoder(utflabel);
+    makeTextDecoder(response, rawBytes) {
+        let headerCharset = this.charsetFromHeaders(response.headers);
+        if (headerCharset != null) {
+            try {
+                return new TextDecoder(headerCharset);
+            } catch (error) {
+                // fallback to detection below
+            }
+        }
+        let bytes = null;
+        if (rawBytes instanceof ArrayBuffer) {
+            bytes = new Uint8Array(rawBytes);
+        } else if (rawBytes instanceof Uint8Array) {
+            bytes = rawBytes;
+        }
+        if (bytes != null) {
+            let detected = detectChineseEncoding(bytes);
+            if (detected != null) {
+                try {
+                    return new TextDecoder(normalizeEncodingName(detected));
+                } catch (error) {
+                    // ignore detection failure and fall back
+                }
+            }
+        }
+        return new TextDecoder(FetchResponseHandler.DEFAULT_CHARSET);
     }
 
     charsetFromHeaders(headers) {
@@ -348,10 +385,203 @@ class FetchResponseHandler {
                 return pieces[1].split(";")[0].replace(/"/g, "").trim();
             }
         }
-        return FetchResponseHandler.DEFAULT_CHARSET;
+        return null;
     }
 }
+HttpClient.activeTabId = null;
 FetchResponseHandler.DEFAULT_CHARSET = "utf-8";
+
+function normalizeEncodingName(name) {
+    if (name == null) {
+        return FetchResponseHandler.DEFAULT_CHARSET;
+    }
+    let enc = String(name).toLowerCase();
+    if (enc === "utf-16le" || enc === "utf-16be" || enc === "utf-8") {
+        return enc;
+    }
+    if (enc === "gbk" || enc === "gb18030") {
+        return "gbk";
+    }
+    if (enc === "big5") {
+        return "big5";
+    }
+    if (enc === "iso-2022-cn") {
+        return "iso-2022-cn";
+    }
+    if (enc === "hz-gb-2312") {
+        return "hz-gb-2312";
+    }
+    if (enc === "euc-tw") {
+        return "euc-tw";
+    }
+    return enc;
+}
+
+// Encoding detection adapted from zh-chardet.js (UTF-8/UTF-16/GBK/Big5/EUC-TW)
+function detectChineseEncoding(bytes) {
+    if (!(bytes instanceof Uint8Array)) {
+        return null;
+    }
+    const len = bytes.length;
+    if (len >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+        return "UTF-8";
+    }
+    if (len >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) {
+        return "UTF-16BE";
+    }
+    if (len >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) {
+        return "UTF-16LE";
+    }
+
+    const sampleSize = Math.min(len, 2048);
+    const sample = bytes.subarray(0, sampleSize);
+
+    if (findSequence(sample, [0x1B, 0x24, 0x29, 0x41]) ||
+        findSequence(sample, [0x1B, 0x24, 0x29, 0x47]) ||
+        findSequence(sample, [0x1B, 0x24, 0x2A, 0x48])) {
+        return "ISO-2022-CN";
+    }
+
+    if (findSequence(sample, [0x7E, 0x7B])) {
+        if (findSequence(sample, [0x7E, 0x7D])) {
+            return "HZ-GB-2312";
+        }
+    }
+
+    if (isValidUtf8(sample)) {
+        return "UTF-8";
+    }
+
+    const candidates = ["GBK", "Big5", "EUC-TW"];
+    let bestEnc = "Unknown";
+    let bestScore = -1;
+
+    for (let i = 0; i < candidates.length; i++) {
+        const enc = candidates[i];
+        const str = tryDecode(sample, enc);
+        let score = -1000;
+
+        if (str) {
+            score = countHan(str);
+            const replacementCount = (str.match(/\uFFFD/g) || []).length;
+            score -= replacementCount * 5;
+
+            if (enc === "EUC-TW") {
+                let ss2Count = 0;
+                for (let j = 0; j < sample.length - 3; j++) {
+                    if (sample[j] === 0x8E &&
+                        sample[j + 1] >= 0xA1 && sample[j + 1] <= 0xB0 &&
+                        sample[j + 2] >= 0xA1 && sample[j + 2] <= 0xFE &&
+                        sample[j + 3] >= 0xA1 && sample[j + 3] <= 0xFE) {
+                        ss2Count++;
+                        j += 3;
+                    }
+                }
+                score += ss2Count * 5;
+            }
+        } else if (enc === "EUC-TW") {
+            score = 0;
+            let ss2Count = 0;
+            let validCount = 0;
+            let invalidCount = 0;
+            for (let j = 0; j < sample.length;) {
+                const b = sample[j];
+                if (b < 0x80) {
+                    j++;
+                    continue;
+                }
+                if (b === 0x8E && j + 3 < sample.length) {
+                    if (sample[j + 1] >= 0xA1 && sample[j + 1] <= 0xB0 &&
+                        sample[j + 2] >= 0xA1 && sample[j + 2] <= 0xFE &&
+                        sample[j + 3] >= 0xA1 && sample[j + 3] <= 0xFE) {
+                        ss2Count++;
+                        validCount++;
+                        j += 4;
+                        continue;
+                    }
+                }
+                if (b >= 0xA1 && b <= 0xFE && j + 1 < sample.length) {
+                    const b2 = sample[j + 1];
+                    if (b2 >= 0xA1 && b2 <= 0xFE) {
+                        validCount++;
+                        j += 2;
+                        continue;
+                    }
+                }
+                invalidCount++;
+                j++;
+            }
+            if (ss2Count === 0) {
+                score = -1000;
+            } else {
+                score = validCount + (ss2Count * 5) - (invalidCount * 5);
+            }
+        }
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestEnc = enc;
+        }
+    }
+
+    if (bestScore > 0) {
+        return bestEnc;
+    }
+
+    return bestEnc === "Unknown" ? "GBK" : bestEnc;
+}
+
+function findSequence(bytes, seq) {
+    for (let i = 0; i < bytes.length - seq.length + 1; i++) {
+        let match = true;
+        for (let j = 0; j < seq.length; j++) {
+            if (bytes[i + j] !== seq[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return true;
+    }
+    return false;
+}
+
+function tryDecode(chunk, enc) {
+    try {
+        const decoder = new TextDecoder(enc, { fatal: false });
+        return decoder.decode(chunk);
+    } catch (e) {
+        return null;
+    }
+}
+
+function isValidUtf8(bytes) {
+    try {
+        new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        return true;
+    } catch (e) {
+        for (let i = 1; i <= 3; i++) {
+            if (bytes.length - i <= 0) break;
+            try {
+                new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, bytes.length - i));
+                return true;
+            } catch (e2) {
+                // ignore
+            }
+        }
+    }
+    return false;
+}
+
+function countHan(str) {
+    let count = 0;
+    for (let i = 0; i < str.length; i++) {
+        const code = str.charCodeAt(i);
+        if (code >= 0x4E00 && code <= 0x9FFF) {
+            count++;
+        }
+    }
+    return count;
+}
 
 class FetchJsonResponseHandler extends FetchResponseHandler {
     constructor() {

@@ -1,0 +1,69 @@
+"use strict";
+
+parserFactory.register("www.666biquge.com", () => new NovelDownloaderBiqugeCommon666biqugeParser());
+
+class NovelDownloaderBiqugeCommon666biqugeParser extends Parser {
+    constructor() {
+        super();
+    }
+
+    async getChapterUrls(dom) {
+        let menu = dom.querySelector("#list") || dom.querySelector(".listmain") || dom.querySelector(".book-item");
+        return util.hyperlinksToChapterList(menu);
+    }
+
+    findContent(dom) {
+        return dom.querySelector("#content");
+    }
+
+    extractTitleImpl(dom) {
+        return dom.querySelector("#info h1, .info h2, .info h1");
+    }
+
+    extractAuthor(dom) {
+        let authorLabel = dom.querySelector("#info > p:nth-child(2), #info > div:nth-child(2), .info .author, .small > span:nth-child(1), .info .fix > p:nth-child(1)");
+        if (authorLabel != null && authorLabel.textContent != null) {
+            return authorLabel.textContent.replace(/作\s*者[：:]/, "").trim();
+        }
+        return super.extractAuthor(dom);
+    }
+
+    findCoverImageUrl(dom) {
+        return util.getFirstImgSrc(dom, "#fmimg > img, .info > .cover > img, .book-boxs > .img > img, .imgbox > img");
+    }
+
+    removeUnwantedElementsFromContentElement(element) {
+        if (element != null) {
+            this.applyContentPatch(element);
+        }
+        super.removeUnwantedElementsFromContentElement(element);
+    }
+
+    findChapterTitle(dom, webPage) {
+        let title = super.findChapterTitle(dom, webPage);
+        if (title == null && webPage && webPage.title) {
+            return webPage.title;
+        }
+        return title;
+    }
+
+    applyContentPatch(content) {
+        rm("script", true, content);
+        rm("div[style]", true, content);
+        rm("div[align]", true, content);
+        return content;
+    }
+}
+
+function rm(selector, all, dom) {
+    if (all) {
+        dom.querySelectorAll(selector).forEach(e => e.remove());
+    } else {
+        let element = dom.querySelector(selector);
+        if (element != null) {
+            element.remove();
+        }
+    }
+}
+
+

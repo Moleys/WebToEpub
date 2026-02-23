@@ -90,7 +90,7 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         this.highestResolutionImages = this.addPreference("highestResolutionImages", "highestResolutionImagesCheckboxInput", true);
         this.unSuperScriptAlternateTranslations = this.addPreference("unSuperScriptAlternateTranslations", "unSuperScriptCheckboxInput", false);
         this.styleSheet = this.addPreference("styleSheet", "stylesheetInput", EpubMetaInfo.getDefaultStyleSheet());
-        this.CustomFilename = this.addPreference("CustomFilename", "CustomFilenameInput", "%Filename%");
+        this.CustomFilename = this.addPreference("CustomFilename", "CustomFilenameInput", "%Title%_%Author%_%Chapters_Start%-%Chapters_End%");
         this.useSvgForImages = this.addPreference("useSvgForImages", "useSvgForImagesInput", true);
         this.removeNextAndPreviousChapterHyperlinks = this.addPreference("removeNextAndPreviousChapterHyperlinks", "removeNextAndPreviousChapterHyperlinksInput", true);
         this.advancedOptionsVisibleByDefault = this.addPreference("advancedOptionsVisibleByDefault", "advancedOptionsVisibleByDefaultCheckbox", false);
@@ -135,9 +135,9 @@ class UserPreferences { // eslint-disable-line no-unused-vars
     /** @private */
     addPreference(storageName, uiElementName, defaultValue) {
         let preference = null;
-        if (typeof(defaultValue) === "boolean") {
+        if (typeof (defaultValue) === "boolean") {
             preference = new BoolUserPreference(storageName, uiElementName, defaultValue);
-        } else if (typeof(defaultValue) === "string") {
+        } else if (typeof (defaultValue) === "string") {
             preference = new StringUserPreference(storageName, uiElementName, defaultValue);
         } else {
             throw new Error("Unknown preference type");
@@ -206,19 +206,19 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         }
         obj[ReadingList.storageName] = JSON.parse(this.readingList.toJson());
         for (let p of this.preferences) {
-            obj[p.storageName] = p.value; 
+            obj[p.storageName] = p.value;
         }
         serialized = JSON.stringify(obj);
-        let blob = new Blob([serialized], {type : "text"});
+        let blob = new Blob([serialized], { type: "text" });
         return Download.save(blob, "Options.json")
-            .catch (err => ErrorLog.showErrorMessage(err));
+            .catch(err => ErrorLog.showErrorMessage(err));
     }
 
     readFromFile(event, populateControls) {
         if (event.target.files.length == 0) {
             return;
         }
-        
+
         let file = event.target.files[0];
         let reader = new FileReader();
         reader.onload = readerEvent => {

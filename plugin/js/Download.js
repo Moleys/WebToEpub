@@ -29,21 +29,49 @@ class Download {
 
     static CustomFilename() {
         let CustomFilename = document.getElementById("CustomFilenameInput").value;
+        let title = document.getElementById("titleInput").value;
+        let author = document.getElementById("authorInput").value;
+        let chaptersCount = document.getElementById("spanChapterCount").innerHTML;
+        let chaptersDownloaded = document.getElementById("fetchProgress").value - 1;
+
+        // Calculate chapter start/end indices
+        let chapterStart = "1";
+        let chapterEnd = chaptersCount || chaptersDownloaded.toString();
+        let rows = document.querySelectorAll("#chapterUrlsTable input[type='checkbox']:checked");
+        if (rows.length > 0) {
+            let indices = [...rows].map((cb, i) => i + 1);
+            chapterStart = indices[0].toString();
+            chapterEnd = indices[indices.length - 1].toString();
+        }
+
+        // Build filename directly from title (preserves CJK)
+        let safeTitle = util.safeForFileName(title, 180);
+        let safeAuthor = util.safeForFileName(author, 40);
+
         let ToReplace = {
             "%URL_hostname%": (new URL(document.getElementById("startingUrlInput").value))?.hostname,
-            "%Title%": document.getElementById("titleInput").value,
-            "%Author%": document.getElementById("authorInput").value,
+            "%Title%": safeTitle,
+            "%Author%": safeAuthor,
             "%Language%": document.getElementById("languageInput").value,
-            "%Chapters_Count%":  document.getElementById("spanChapterCount").innerHTML,
-            "%Chapters_Downloaded%":  document.getElementById("fetchProgress").value-1,
-            "%Filename%": document.getElementById("fileNameInput").value,
+            "%Chapters_Count%": chaptersCount,
+            "%Chapters_Downloaded%": chaptersDownloaded,
+            "%Chapters_Start%": chapterStart,
+            "%Chapters_End%": chapterEnd,
+            "%Filename%": safeTitle,
         };
         for (const [key, value] of Object.entries(ToReplace)) {
             CustomFilename = CustomFilename.replaceAll(key, value);
         }
-        if (Download.isFileNameIllegalOnWindows(CustomFilename)) {
-            ErrorLog.showErrorMessage(UIText.Error.errorIllegalFileName(CustomFilename, Download.illegalWindowsFileNameChars));
-            return EpubPacker.addExtensionIfMissing("IllegalFileName");
+        // Sanitize and truncate to 250 bytes (leaving room for .epub extension)
+        CustomFilename = util.safeForFileName(CustomFilename, 250);
+        if (!CustomFilename || CustomFilename.trim() === "") {
+            // Fallback: build {title}_{author}_{start}-{end}
+            let fallback = safeTitle || "web";
+            if (safeAuthor) {
+                fallback += "_" + safeAuthor;
+            }
+            fallback += "_" + chapterStart + "-" + chapterEnd;
+            CustomFilename = util.safeForFileName(fallback, 250);
         }
         return EpubPacker.addExtensionIfMissing(CustomFilename);
     }
@@ -66,8 +94,8 @@ class Download {
         // on Chrome call to download() will resolve when "Save As" dialog OPENS
         // so need to delay return until after file is actually saved
         // Otherwise, we get multiple Save As Dialogs open.
-        return new Promise((resolve,reject) => {
-            chrome.downloads.download(options, 
+        return new Promise((resolve, reject) => {
+            chrome.downloads.download(options,
                 downloadId => Download.downloadCallback(downloadId, cleanup, resolve, reject)
             );
         });
@@ -77,8 +105,8 @@ class Download {
         if (downloadId === undefined) {
             reject(new Error(chrome.runtime.lastError.message));
         } else {
-            Download.onDownloadStarted(downloadId, 
-                () => { 
+            Download.onDownloadStarted(downloadId,
+                () => {
                     const tenSeconds = 10 * 1000;
                     setTimeout(cleanup, tenSeconds);
                     resolve();

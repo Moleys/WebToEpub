@@ -7,7 +7,7 @@
 
 "use strict";
 
-const util = (function() {
+const util = (function () {
     var sleepController = new AbortController;
 
     function sleep(ms) {
@@ -26,17 +26,14 @@ const util = (function() {
     }
 
     function isFirefox() {
-        if (navigator.brave && navigator.brave.isBrave)
-        {
+        if (navigator.brave && navigator.brave.isBrave) {
             return false;
         }
-        else if (typeof (browser) === "undefined")
-        {
+        else if (typeof (browser) === "undefined") {
             // old version of chrome
             return false;
         }
-        else
-        {
+        else {
             // this only works as long as firefox hasn't implemented this 
             // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/PlatformNaclArch
             return (typeof (browser.runtime.PlatformNaclArch) == "undefined");
@@ -482,7 +479,7 @@ const util = (function() {
     }
 
     function findPrimaryStyleSettings(element, styleProperties) {
-        let characterCountForElement = function(element) {
+        let characterCountForElement = function (element) {
             let count = 0;
             let child = element.firstChild;
             while (child) {
@@ -494,7 +491,7 @@ const util = (function() {
             return count;
         };
 
-        let findMaxCount = function(map) {
+        let findMaxCount = function (map) {
             let maxPair = [undefined, 0];
             for (let pair of map) {
                 if (maxPair[1] <= pair[1]) {
@@ -504,7 +501,7 @@ const util = (function() {
             return maxPair[0];
         };
 
-        let mergeStyles = function(parentStyle, currentStyle, styleProperty) {
+        let mergeStyles = function (parentStyle, currentStyle, styleProperty) {
             if (currentStyle === null || currentStyle === undefined) {
                 return parentStyle;
             }
@@ -512,7 +509,7 @@ const util = (function() {
             return c !== "" ? c : parentStyle;
         };
 
-        let updateStat = function(map, key, count) {
+        let updateStat = function (map, key, count) {
             let total = map.get(key);
             if (total === undefined) {
                 total = 0;
@@ -520,7 +517,7 @@ const util = (function() {
             map.set(key, total + count);
         };
 
-        let walk = function(element, stats, parentStyle, styleProperties) {
+        let walk = function (element, stats, parentStyle, styleProperties) {
             let mergedStyle = [];
             let count = characterCountForElement(element);
             for (let i = 0; i < styleProperties.length; ++i) {
@@ -604,7 +601,7 @@ const util = (function() {
         }
 
         let linkSet = new Set();
-        let includeLink = function(link) {
+        let includeLink = function (link) {
             // ignore links with no name or link
             if (isNullOrEmpty(link.innerText) || isNullOrEmpty(link.href)) {
                 return false;
@@ -622,7 +619,7 @@ const util = (function() {
 
         // only set newArc when arc changes
         let currentArc = null;
-        let newArcValueForChapter = function(link) {
+        let newArcValueForChapter = function (link) {
             if (getChapterArc) {
                 let arc = getChapterArc(link);
                 if (arc === currentArc) {
@@ -775,20 +772,39 @@ const util = (function() {
         return element;
     }
 
-    function safeForFileName(title, maxLength = 20) {
-        if (title) {
-            // Allow only a-z regardless of case and numbers as well as hyphens and underscores; replace spaces and no-break spaces with underscores
-            title = title.replace(/[ \u00a0]/gi, "_").replace(/([^a-z0-9_-]+)/gi, "");
-            // There is technically a 255-character limit in windows for file paths.
-            // So we will allow files to have 20 characters and when they go over we split them
-            // we then truncate the middle so that the file name is always different
-            const ellipsis = "...";
-            let splitLength = Math.floor((maxLength - ellipsis.length) / 2);
-            return title.length > maxLength
-                ? title.slice(0, splitLength) + ellipsis + title.slice(title.length - splitLength)
-                : title;
+    function safeForFileName(title, maxLength = 240) {
+        if (!title) return "";
+        // Strip filesystem-illegal chars and control characters
+        // Keep Unicode letters (CJK, Vietnamese, etc.)
+        title = title.replace(/[\\/:"*?<>|\x00-\x1f\x7f]/g, "");
+        // Replace spaces and no-break spaces with underscores
+        title = title.replace(/[\s\u00a0]+/g, "_");
+        // Remove leading/trailing underscores and dots
+        title = title.replace(/^[_.]+|[_.]+$/g, "");
+        // Collapse consecutive underscores
+        title = title.replace(/_+/g, "_");
+        // Truncate to fit maxLength in UTF-8 bytes
+        title = truncateToUtf8Bytes(title, maxLength);
+        return title;
+    }
+
+    function truncateToUtf8Bytes(str, maxBytes) {
+        let encoder = new TextEncoder();
+        let encoded = encoder.encode(str);
+        if (encoded.length <= maxBytes) {
+            return str;
         }
-        return "";
+        // Binary search for the right truncation point
+        let low = 0, high = str.length;
+        while (low < high) {
+            let mid = Math.ceil((low + high) / 2);
+            if (encoder.encode(str.slice(0, mid)).length <= maxBytes) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return str.slice(0, low);
     }
 
     function makeStorageFileName(subdirectory, index, title, extension) {
@@ -926,7 +942,7 @@ const util = (function() {
      * @param {string} prefix - text that precedes the embedded JSON
      */
     function locateAndExtractJson(s, prefix) {
-        const findOpeningBracket = function(s, index) {
+        const findOpeningBracket = function (s, index) {
             while (index < s.length) {
                 let ch = s[index];
                 if ((ch === "[") || (ch === "{")) {
@@ -953,7 +969,7 @@ const util = (function() {
 
     function createChapterTab(url) {
         return new Promise((resolve) => {
-            chrome.tabs.create({url: url, active: false}, (tab) => {
+            chrome.tabs.create({ url: url, active: false }, (tab) => {
                 resolve(tab.id);
             });
         });
@@ -1054,8 +1070,7 @@ const util = (function() {
         element.appendChild(wrapper);
     }
 
-    function getDefaultExtensionByMime(mimeType)
-    {
+    function getDefaultExtensionByMime(mimeType) {
         let retval = MIME_TYPE_EXTENSIONS[mimeType];
         if (retval) retval = retval[0];
         return retval;

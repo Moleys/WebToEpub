@@ -13,7 +13,7 @@ class FetchCache { // eslint-disable-line no-unused-vars
     }
 
     async fetch(url) {
-        if  (!this.inCache(url)) {
+        if (!this.inCache(url)) {
             this.dom = (await HttpClient.wrapFetch(url)).responseXML;
             this.path = new URL(url).pathname;
         }
@@ -21,8 +21,8 @@ class FetchCache { // eslint-disable-line no-unused-vars
     }
 
     inCache(url) {
-        return (((new URL(url).pathname) === this.path) 
-        && (this.dom !== null));
+        return (((new URL(url).pathname) === this.path)
+            && (this.dom !== null));
     }
 }
 
@@ -51,7 +51,7 @@ class ParserState {
     }
 }
 
-class Parser {    
+class Parser {
     constructor(imageCollector) {
         this.minimumThrottle = 500;
         this.maxSimultanousFetchSize = 1;
@@ -73,7 +73,7 @@ class Parser {
     getPagesToFetch() {
         return this.state.webPages;
     }
-    
+
     //Use this option if the parser isn't sending the correct HTTP header
     isCustomError(response) {  // eslint-disable-line no-unused-vars
         return false;
@@ -89,7 +89,7 @@ class Parser {
         ret.response.url = checkedresponse.response.url;
         ret.response.status = 403;
         //How often should it be retried and with how much delay in between
-        ret.response.retryDelay = [80,40,20,10,5];
+        ret.response.retryDelay = [80, 40, 20, 10, 5];
         ret.errorMessage = "This is a custom error message that will be displayed should all retries fail";
         //return empty to throw error
         return {};
@@ -102,11 +102,12 @@ class Parser {
 
     isWebPagePackable(webPage) {
         return ((webPage.isIncludeable)
-         && ((webPage.rawDom != null) || (webPage.error != null)));
+            && ((webPage.rawDom != null) || (webPage.error != null)));
     }
 
     convertRawDomToContent(webPage) {
         let content = this.findContent(webPage.rawDom);
+        content = Parser.replaceContentIfNextData(webPage.rawDom, content);
         this.customRawDomToContentStep(webPage, content);
         util.decodeCloudflareProtectedEmails(content);
         if (this.userPreferences.removeNextAndPreviousChapterHyperlinks.value) {
@@ -130,6 +131,87 @@ class Parser {
             ErrorLog.showErrorMessage(errorMsg);
         }
         return content;
+    }
+
+    static replaceContentIfNextData(dom, content) {
+        if (Parser.isNextDataScript(content)) {
+            return Parser.extractContentFromNextData(dom, content) || content;
+        }
+        if (content == null) {
+            let fallback = Parser.extractContentFromNextData(dom, dom.querySelector("script#__NEXT_DATA__"));
+            if (fallback != null) {
+                return fallback;
+            }
+        }
+        return content;
+    }
+
+    static isNextDataScript(node) {
+        return (node != null)
+            && (node.tagName === "SCRIPT")
+            && (node.getAttribute("id") === "__NEXT_DATA__");
+    }
+
+    static extractContentFromNextData(dom, scriptNode) {
+        if (scriptNode == null) {
+            return null;
+        }
+        try {
+            let json = JSON.parse(scriptNode.textContent || "{}");
+            let html = Parser.findHtmlStringInObject(json);
+            if (util.isNullOrEmpty(html)) {
+                return null;
+            }
+            let container = dom.createElement("div");
+            container.innerHTML = html;
+            return container;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    static findHtmlStringInObject(value) {
+        let best = null;
+        let check = (s) => {
+            if (typeof s !== "string") {
+                return;
+            }
+            if (!Parser.looksLikeHtml(s)) {
+                return;
+            }
+            if ((best == null) || (s.length > best.length)) {
+                best = s;
+            }
+        };
+        let walk = (v) => {
+            if (v == null) {
+                return;
+            }
+            if (typeof v === "string") {
+                check(v);
+                return;
+            }
+            if (Array.isArray(v)) {
+                for (let item of v) {
+                    walk(item);
+                }
+                return;
+            }
+            if (typeof v === "object") {
+                for (let item of Object.values(v)) {
+                    walk(item);
+                }
+            }
+        };
+        walk(value);
+        return best;
+    }
+
+    static looksLikeHtml(text) {
+        if (util.isNullOrEmpty(text)) {
+            return false;
+        }
+        return (text.length > 30) && (/<\/?[a-z][\s>]/i.test(text));
     }
 
     addTitleToContent(webPage, content) {
@@ -210,8 +292,123 @@ class Parser {
                     return cover.src;
                 }
             }
+            let ogImage = dom.querySelector("meta[property='og:image']");
+            if (ogImage != null) {
+                let content = ogImage.getAttribute("content");
+                if (!util.isNullOrEmpty(content)) {
+                    return content;
+                }
+            }
         }
         return null;
+    }
+
+    async fetchChapterUrlsFromAjax(dom, reverseOrder) {
+        if (dom == null) {
+            return [];
+        }
+        let baseUrl = dom.baseURI || "";
+        if (util.isNullOrEmpty(baseUrl)) {
+            return [];
+        }
+        baseUrl = baseUrl.split("#")[0];
+        baseUrl = baseUrl.split("?")[0];
+        baseUrl = baseUrl.replace(/\/$/, "");
+        let origin = new URL(baseUrl).origin;
+        let ajaxCandidates = [
+            `${baseUrl}/ajax/chapters/`,
+            `${baseUrl}/ajax/chapters`,
+        ];
+
+        let chapters = await Parser.tryFetchChapterListFromAjaxUrls(dom, ajaxCandidates, reverseOrder);
+        if (chapters.length > 0) {
+            return chapters;
+        }
+
+        let mangaId = dom.querySelector("#manga-chapters-holder")?.getAttribute("data-id");
+        if (!util.isNullOrEmpty(mangaId)) {
+            let adminAjax = `${origin}/wp-admin/admin-ajax.php`;
+            let params = new URLSearchParams();
+            params.set("action", "manga_get_chapters");
+            params.set("manga", mangaId);
+            params.set("post_id", mangaId);
+            params.set("chapter_id", "0");
+            params.set("nonce", "");
+            let fetchOptions = {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+                body: params.toString(),
+                credentials: "include"
+            };
+            let domResponse = await Parser.fetchDomFromUrl(adminAjax, fetchOptions);
+            chapters = Parser.extractChapterLinksFromDom(domResponse, reverseOrder);
+            if (chapters.length > 0) {
+                return chapters;
+            }
+        }
+
+        return [];
+    }
+
+    static async tryFetchChapterListFromAjaxUrls(dom, urls, reverseOrder) {
+        for (let url of urls) {
+            try {
+                let domResponse = await Parser.fetchDomFromUrl(url, { method: "POST", credentials: "include" });
+                let chapters = Parser.extractChapterLinksFromDom(domResponse, reverseOrder);
+                if (chapters.length > 0) {
+                    return chapters;
+                }
+            } catch (error) {
+                // ignore and continue to next candidate
+            }
+            try {
+                let domResponse = await Parser.fetchDomFromUrl(url, { method: "GET", credentials: "include" });
+                let chapters = Parser.extractChapterLinksFromDom(domResponse, reverseOrder);
+                if (chapters.length > 0) {
+                    return chapters;
+                }
+            } catch (error) {
+                // ignore and continue to next candidate
+            }
+        }
+        return [];
+    }
+
+    static extractChapterLinksFromDom(dom, reverseOrder) {
+        if (dom == null) {
+            return [];
+        }
+        let selectors = [
+            "li.wp-manga-chapter a",
+            ".wp-manga-chapter a",
+            "li a",
+            "a"
+        ];
+        let links = [];
+        for (let selector of selectors) {
+            links = [...dom.querySelectorAll(selector)]
+                .filter(a => a && a.href && !util.isNullOrEmpty(a.textContent));
+            if (links.length > 0) {
+                break;
+            }
+        }
+        let chapters = links.map(a => util.hyperLinkToChapter(a));
+        if (reverseOrder) {
+            chapters = chapters.reverse();
+        }
+        return chapters;
+    }
+
+    static async fetchDomFromUrl(url, fetchOptions) {
+        let wrapOptions = {
+            responseHandler: new FetchTextResponseHandler(),
+            fetchOptions: fetchOptions
+        };
+        let response = await HttpClient.wrapFetchImpl(url, wrapOptions);
+        let html = response.text || "";
+        let dom = new DOMParser().parseFromString(html, "text/html");
+        util.setBaseTag(response.response?.url || url, dom);
+        return dom;
     }
 
     removeNextAndPreviousChapterHyperlinks(webPage, element) {
@@ -249,7 +446,11 @@ class Parser {
     */
     static extractTitleDefault(dom) {
         let title = dom.querySelector("meta[property='og:title']");
-        return (title === null) ? dom.title : title.getAttribute("content");
+        if (title === null) {
+            return "";
+        }
+        let content = title.getAttribute("content");
+        return util.isNullOrEmpty(content) ? "" : content;
     }
 
     extractTitleImpl(dom) {
@@ -258,11 +459,14 @@ class Parser {
 
     extractTitle(dom) {
         let title = this.extractTitleImpl(dom);
-        if (title == null) {
-            title = Parser.extractTitleDefault(dom);
-        }
         if (title.textContent !== undefined) {
             title = title.textContent;
+        }
+        if ((title == null) || util.isNullOrEmpty(title)) {
+            title = Parser.extractTitleDefault(dom);
+            if (title.textContent !== undefined) {
+                title = title.textContent;
+            }
         }
         return title.trim();
     }
@@ -300,8 +504,7 @@ class Parser {
 
     extractDescription(dom) {
         let infoDiv = document.createElement("div");
-        if (this.getInformationEpubItemChildNodes !== undefined)
-        {
+        if (this.getInformationEpubItemChildNodes !== undefined) {
             this.populateInfoDiv(infoDiv, dom);
         }
         return infoDiv.textContent;
@@ -372,8 +575,8 @@ class Parser {
     }
 
     makeSaveAsFileNameWithoutExtension(title, useFullTitle) {
-        let maxFileNameLength = useFullTitle ? 512 : 20;
-        let fileName = (title == null)  ? "web" : util.safeForFileName(title, maxFileNameLength);
+        let maxFileNameLength = useFullTitle ? 240 : 240;
+        let fileName = (title == null) ? "web" : util.safeForFileName(title, maxFileNameLength);
         if (util.isStringWhiteSpace(fileName)) {
             // title is probably not English, so just use it as is
             fileName = title;
@@ -403,7 +606,7 @@ class Parser {
                 : this.makePlaceholderEpubItem(webPage, index);
             epubItems = epubItems.concat(newItems);
             index += newItems.length;
-            delete(webPage.rawDom);
+            delete (webPage.rawDom);
         }
         return epubItems;
     }
@@ -420,14 +623,14 @@ class Parser {
         urlElement.appendChild(document.createTextNode(this.state.chapterListUrl));
         div.appendChild(urlElement);
         let infoDiv = document.createElement("div");
-        this.populateInfoDiv(infoDiv, dom);    
+        this.populateInfoDiv(infoDiv, dom);
         let childNodes = [title, div, infoDiv];
         let chapter = {
             sourceUrl: this.state.chapterListUrl,
             title: titleText,
             newArch: null
         };
-        return new ChapterEpubItem(chapter, {childNodes: childNodes}, 0);
+        return new ChapterEpubItem(chapter, { childNodes: childNodes }, 0);
     }
 
     populateInfoDiv(infoDiv, dom) {
@@ -480,7 +683,7 @@ class Parser {
 
     cleanWebPageUrls(webPages) {
         let foundUrls = new Set();
-        let isUnique = function(webPage) {
+        let isUnique = function (webPage) {
             let unique = !foundUrls.has(webPage.sourceUrl);
             if (unique) {
                 foundUrls.add(webPage.sourceUrl);
@@ -501,12 +704,11 @@ class Parser {
 
     addFirstPageUrlToWebPages(url, firstPageDom, webPages) {
         let present = webPages.find(e => e.sourceUrl === url);
-        if (present)
-        {
+        if (present) {
             return webPages;
         } else {
             return [{
-                sourceUrl:  url,
+                sourceUrl: url,
                 title: this.extractTitle(firstPageDom)
             }].concat(webPages);
         }
@@ -543,8 +745,7 @@ class Parser {
 
         await this.addParsersToPages(pagesToFetch);
         let index = 0;
-        try
-        {
+        try {
             let group = this.groupPagesToFetch(pagesToFetch, index);
             while (0 < group.length) {
                 await Promise.all(group.map(async (webPage) => this.fetchWebPageContent(webPage)));
@@ -555,8 +756,7 @@ class Parser {
                 }
             }
         }
-        catch (err)
-        {
+        catch (err) {
             ErrorLog.log(err);
         }
     }
@@ -635,7 +835,7 @@ class Parser {
 
     // Hook point, when need to do something when "Pack EPUB" pressed
     onStartCollecting() {
-    }    
+    }
 
     fixupHyperlinksInEpubItems(epubItems) {
         let targets = this.sourceUrlToEpubItemUrl(epubItems);
@@ -652,7 +852,7 @@ class Parser {
         let targets = new Map();
         for (let item of epubItems) {
             let key = util.normalizeUrlForCompare(item.sourceUrl);
-            
+
             // Some source URLs may generate multiple epub items.
             // In that case, want FIRST epub item
             if (!targets.has(key)) {
@@ -708,14 +908,14 @@ class Parser {
     static makeEmptyDocForContent(baseUrl) {
         let dom = document.implementation.createHTMLDocument("");
         if (baseUrl != null) {
-            util.setBaseTag(baseUrl, dom);        
+            util.setBaseTag(baseUrl, dom);
         }
         let content = dom.createElement("div");
         content.className = Parser.WEB_TO_EPUB_CLASS_NAME;
         dom.body.appendChild(content);
         return {
             dom: dom,
-            content: content 
+            content: content
         };
     }
 
@@ -736,17 +936,15 @@ class Parser {
         }
     }
 
-    async getChapterUrlsFromMultipleTocPages(dom, extractPartialChapterList, getUrlsOfTocPages, chapterUrlsUI)  {
+    async getChapterUrlsFromMultipleTocPages(dom, extractPartialChapterList, getUrlsOfTocPages, chapterUrlsUI) {
         let chapters = extractPartialChapterList(dom);
         let urlsOfTocPages = getUrlsOfTocPages(dom);
         return await this.getChaptersFromAllTocPages(chapters, extractPartialChapterList, urlsOfTocPages, chapterUrlsUI);
     }
 
-    getRateLimit()
-    {
-        let manualDelayPerChapterValue = (!isNaN(parseInt(this.userPreferences.manualDelayPerChapter.value)))?parseInt(this.userPreferences.manualDelayPerChapter.value):this.minimumThrottle;
-        if (!this.userPreferences.overrideMinimumDelay.value)
-        {
+    getRateLimit() {
+        let manualDelayPerChapterValue = (!isNaN(parseInt(this.userPreferences.manualDelayPerChapter.value))) ? parseInt(this.userPreferences.manualDelayPerChapter.value) : this.minimumThrottle;
+        if (!this.userPreferences.overrideMinimumDelay.value) {
             return Math.max(this.minimumThrottle, manualDelayPerChapterValue);
         }
         return manualDelayPerChapterValue;
@@ -757,7 +955,7 @@ class Parser {
         await util.sleep(manualDelayPerChapterValue);
     }
 
-    async getChaptersFromAllTocPages(chapters, extractPartialChapterList, urlsOfTocPages, chapterUrlsUI, wrapOptions)  {
+    async getChaptersFromAllTocPages(chapters, extractPartialChapterList, urlsOfTocPages, chapterUrlsUI, wrapOptions) {
         if (0 < chapters.length) {
             chapterUrlsUI.showTocProgress(chapters);
         }
@@ -816,7 +1014,7 @@ class Parser {
             util.moveChildElements(newContent, oldContent);
         }
         return dom;
-    }    
+    }
 }
 
 Parser.WEB_TO_EPUB_CLASS_NAME = "webToEpubContent";

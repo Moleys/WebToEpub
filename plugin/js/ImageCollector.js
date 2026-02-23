@@ -21,7 +21,7 @@ class ImageCollector {
     static StubCollector() {
         return {
             coverImageInfo: null,
-            imagesToPackInEpub: function() { return []; }
+            imagesToPackInEpub: function () { return []; }
         };
     }
 
@@ -64,7 +64,7 @@ class ImageCollector {
             } else {
                 this.imagesToFetch.push(imageInfo);
             }
-        }           
+        }
         this.urlIndex.set(wrappingUrl, index);
         this.urlIndex.set(sourceUrl, index);
         if (dataOrigFileUrl != null) {
@@ -146,7 +146,7 @@ class ImageCollector {
         return ImageCollector.toHex(byteArray.length) + ImageCollector.toHex(hash);
     }
 
-    
+
     /** Convert integer to 8 character Hex value
     * @private
     */
@@ -210,7 +210,7 @@ class ImageCollector {
     isImageWrapperElement(element) {
         return ((element.tagName.toLowerCase() === "div") &&
             ((element.className === "thumb tright") || (element.className === "floatright") ||
-            (element.className === "thumb") || (element.className === "floatleft")));
+                (element.className === "thumb") || (element.className === "floatleft")));
     }
 
     findImagesUsedInDocument(content) {
@@ -284,7 +284,7 @@ class ImageCollector {
         }
         return null;
     }
-    
+
     /**  Update image tags, point to image file in epub
     * @param {element} element containing <img> tags to update
     */
@@ -299,16 +299,16 @@ class ImageCollector {
     getImageDimensions(imageInfo) {
         return new Promise((resolve, reject) => { // eslint-disable-line no-unused-vars
             let img = new Image();
-            let options = {type: imageInfo.mediaType};
+            let options = { type: imageInfo.mediaType };
             let blob = new Blob([new Uint8Array(imageInfo.arraybuffer)], options);
             let dataUrl = URL.createObjectURL(blob);
-            img.onload = function() {
+            img.onload = function () {
                 imageInfo.height = img.height;
                 imageInfo.width = img.width;
                 URL.revokeObjectURL(dataUrl);
                 resolve(img);
             };
-            img.onerror = function() {
+            img.onerror = function () {
                 // If the image gives an error then set a general height and width
                 imageInfo.height = 1200;
                 imageInfo.width = 1600;
@@ -322,8 +322,7 @@ class ImageCollector {
 
     runCompression(imageInfo, img) {
         return new Promise((resolve, reject) => {
-            if (this.userPreferences.compressImages.value) 
-            {
+            if (this.userPreferences.compressImages.value) {
                 let outputType = "image/jpeg";
                 switch (this.userPreferences.compressImagesType.value) {
                     case "auto":
@@ -341,28 +340,23 @@ class ImageCollector {
                         break;
                 }
 
-                if (imageInfo.isCover && this.userPreferences.compressImagesJpgCover.value)
-                {
+                if (imageInfo.isCover && this.userPreferences.compressImagesJpgCover.value) {
                     outputType = "image/jpeg";
                 }
                 let c = document.createElement("canvas");
                 let ctx = c.getContext("2d");
-                let maxResolution = this.userPreferences.compressImagesMaxResolution.value;            
-                if (imageInfo.height > maxResolution || imageInfo.width > maxResolution)
-                {
-                    if (imageInfo.height > imageInfo.width)
-                    {
+                let maxResolution = this.userPreferences.compressImagesMaxResolution.value;
+                if (imageInfo.height > maxResolution || imageInfo.width > maxResolution) {
+                    if (imageInfo.height > imageInfo.width) {
                         c.height = maxResolution;
-                        c.width = Math.max(1, Math.round((imageInfo.width * 1.0) / ((imageInfo.height * 1.0)/maxResolution)));
+                        c.width = Math.max(1, Math.round((imageInfo.width * 1.0) / ((imageInfo.height * 1.0) / maxResolution)));
                     }
-                    else
-                    {
+                    else {
                         c.width = maxResolution;
-                        c.height = Math.max(1, Math.round((imageInfo.height * 1.0) / ((imageInfo.width * 1.0)/maxResolution)));
+                        c.height = Math.max(1, Math.round((imageInfo.height * 1.0) / ((imageInfo.width * 1.0) / maxResolution)));
                     }
                 }
-                else
-                {
+                else {
                     c.height = imageInfo.height;
                     c.width = imageInfo.width;
                 }
@@ -379,24 +373,23 @@ class ImageCollector {
                     }
                 }, outputType, 0.9);
             }
-            else
-            {
+            else {
                 resolve();
             }
         });
     }
 
     async fetchImage(imageInfo, progressIndicator, parentPageUrl) {
-        try
-        {
+        try {
             let initialUrl = this.initialUrlToTry(imageInfo);
             this.urlIndex.set(initialUrl, imageInfo.index);
-            let fetchOptions = {errorHandler: new FetchImageErrorHandler(parentPageUrl) };
+            let fetchOptions = { errorHandler: new FetchImageErrorHandler(parentPageUrl) };
             let xhr = await HttpClient.wrapFetch(initialUrl, fetchOptions);
             xhr = await this.findImageFileUrl(xhr, imageInfo, imageInfo.dataOrigFileUrl, fetchOptions);
             imageInfo.mediaType = xhr.contentType;
             imageInfo.arraybuffer = xhr.arrayBuffer;
             this.fixupInvalidMediaType(imageInfo);
+            await ImageCollector.convertWebpToPng(imageInfo);
             {
                 let img = await this.getImageDimensions(imageInfo);
                 await this.runCompression(imageInfo, img);
@@ -404,19 +397,49 @@ class ImageCollector {
             progressIndicator();
             this.addToPackList(imageInfo);
         }
-        catch (error)
-        {
+        catch (error) {
             // ToDo, implement error handler.
             this.imagesToPack.push(imageInfo);
             ErrorLog.log(error);
         }
     }
 
+    static convertWebpToPng(imageInfo) {
+        if (imageInfo.mediaType !== "image/webp") {
+            return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+            let blob = new Blob([new Uint8Array(imageInfo.arraybuffer)], { type: "image/webp" });
+            let dataUrl = URL.createObjectURL(blob);
+            let img = new Image();
+            img.onload = function () {
+                let c = document.createElement("canvas");
+                c.width = img.naturalWidth;
+                c.height = img.naturalHeight;
+                let ctx = c.getContext("2d");
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(dataUrl);
+                c.toBlob(async (pngBlob) => {
+                    if (pngBlob) {
+                        imageInfo.arraybuffer = await pngBlob.arrayBuffer();
+                        imageInfo.mediaType = "image/png";
+                    }
+                    resolve();
+                }, "image/png");
+            };
+            img.onerror = function () {
+                // If conversion fails, keep original WebP data
+                URL.revokeObjectURL(dataUrl);
+                resolve();
+            };
+            img.src = dataUrl;
+        });
+    }
+
     fixupInvalidMediaType(imageInfo) {
         if (!imageInfo.mediaType?.startsWith("image")) {
             imageInfo.mediaType = util.detectMimeType(imageInfo.getBase64(25));
-            if (imageInfo.mediaType == null)
-            {
+            if (imageInfo.mediaType == null) {
                 let path = new URL(imageInfo.sourceUrl).pathname;
                 let index = path.lastIndexOf(".");
                 let format = (index < 0)
@@ -460,7 +483,7 @@ class ImageCollector {
         let xhr = await HttpClient.wrapFetch(imageInfo.dataOrigFileUrl);
         await this.findImageFileUrl(xhr, imageInfo, null);
     }
-    
+
     imagesToPackInEpub() {
         return this.imagesToPack;
     }
@@ -470,7 +493,7 @@ class ImageCollector {
     */
     initialUrlToTry(imageInfo) {
         let urlToTry = imageInfo.sourceUrl;
-        if (!util.isNullOrEmpty(imageInfo.wrappingUrl) 
+        if (!util.isNullOrEmpty(imageInfo.wrappingUrl)
             && !ImageCollector.urlHasFragment(imageInfo.wrappingUrl)) {
             urlToTry = imageInfo.wrappingUrl;
         }
@@ -484,12 +507,12 @@ class ImageCollector {
             return false;
         }
     }
-    
+
     static removeSizeParamsFromWordPressQuery(originalUrl) {
         let url = new URL(originalUrl);
         let searchParams = url.searchParams;
-        if (!util.isNullOrEmpty(searchParams.toString()) && 
-            ImageCollector.isWordPressHostedFile(url.hostname) ) {
+        if (!util.isNullOrEmpty(searchParams.toString()) &&
+            ImageCollector.isWordPressHostedFile(url.hostname)) {
             ImageCollector.removeSizeParamsFromSearch(searchParams);
             return url.toString();
         } else {
@@ -542,10 +565,10 @@ class ImageCollector {
     static isHyperlinkToImage(hyperlink) {
         let extension = ImageCollector.getExtensionFromUrlFilename(hyperlink);
         return extension === "png" ||
-        extension === "jpg" ||
-        extension === "jpeg" ||
-        extension === "gif" ||
-        extension === "svg";
+            extension === "jpg" ||
+            extension === "jpeg" ||
+            extension === "gif" ||
+            extension === "svg";
     }
 
     /** @private */
@@ -681,7 +704,7 @@ class ImageTagReplacer {
      * @private
      */
     isDuplicateImageToRemove(imageInfo) {
-        return this.userPreferences.removeDuplicateImages.value && 
+        return this.userPreferences.removeDuplicateImages.value &&
             this.isElementInImageGallery() && (imageInfo.isOutsideGallery || imageInfo.isCover);
     }
 

@@ -154,14 +154,24 @@ class CoverImageUI { // eslint-disable-line no-unused-vars
         if (inputUrl.onchange == null) {
             inputUrl.onchange = CoverImageUI.showSampleImg;
         }
-        inputUrl.value = url;
-        CoverImageUI.getSampleCoverImg().src = url;
+        let normalizedUrl = util.isNullOrEmpty(url) ? "" : url;
+        inputUrl.value = normalizedUrl;
+        let sampleImg = CoverImageUI.getSampleCoverImg();
+        if (normalizedUrl === "") {
+            sampleImg.removeAttribute("src");
+        } else {
+            sampleImg.src = normalizedUrl;
+        }
     }
 
     /** @private */
     static showSampleImg() {
         let url = CoverImageUI.getCoverImageUrlInput().value;
         let sampleImg = CoverImageUI.getSampleCoverImg();
-        sampleImg.src = url;
+        if (util.isNullOrEmpty(url)) {
+            sampleImg.removeAttribute("src");
+        } else {
+            sampleImg.src = url;
+        }
     }
 }
