@@ -98,6 +98,10 @@ class Parser {
     onUserPreferencesUpdate(userPreferences) {
         this.userPreferences = userPreferences;
         this.imageCollector.onUserPreferencesUpdate(userPreferences);
+        let maxFetch = parseInt(userPreferences.maxPagesToFetchSimultaneously.value);
+        if (!isNaN(maxFetch) && maxFetch >= 1) {
+            this.maxSimultanousFetchSize = maxFetch;
+        }
     }
 
     isWebPagePackable(webPage) {
