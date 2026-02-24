@@ -110,7 +110,7 @@ class LanrySpaceParser extends Parser {
             try {
                 json[i] = this.parseNextjsHydration(scriptElement[j]);
                 i++;
-                if (scriptElement[j].length > longestcontent) {
+                if (scriptElement[j].length > longestcontent && json[i-1].length == 2) {
                     longestcontent = scriptElement[j].length;
                     longestindex = i-1;
                 }
