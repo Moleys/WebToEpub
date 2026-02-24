@@ -57,6 +57,10 @@ class ShuParser extends Parser {
         return genres.map(e => e.textContent).join(", ");
     }
 
+    extractDescription(dom) { // We only take the first p element that holds the description, the second one holds the story keywords.
+        return dom.querySelector(".navtxt > p:nth-child(1)").textContent.trim(); 
+    }
+
     async fetchChapter(url) {
         // site does not tell us gb18030 is used to encode text
         return (await HttpClient.wrapFetch(url, this.makeOptions())).responseXML;
