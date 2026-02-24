@@ -45,6 +45,18 @@ class ShuParser extends Parser {
         super.removeUnwantedElementsFromContentElement(element);
     }
 
+    extractSubject(dom) {
+        let genres = [...dom.querySelectorAll(".booknav2 > p:nth-child(3) a")];
+
+        let tagHeader = dom.querySelector(".tagtitle");
+        if (tagHeader?.textContent == "标签") { 
+            let tags = [...dom.querySelectorAll("#tagul a")];
+            return [...genres, ...tags].map(e => e.textContent).join(", ");
+        }
+
+        return genres.map(e => e.textContent).join(", ");
+    }
+
     async fetchChapter(url) {
         // site does not tell us gb18030 is used to encode text
         return (await HttpClient.wrapFetch(url, this.makeOptions())).responseXML;
