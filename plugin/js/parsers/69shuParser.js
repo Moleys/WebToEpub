@@ -155,8 +155,7 @@ class _69shuTwParser extends ShuParser {
     async getChapterUrls(dom) {
         let base = "https://69shuba.tw";
         
-        let tocRel = dom.querySelector(".book-op > tbody tr td:nth-child(2) a").getAttribute("href");
-        let tocUrl = new URL(tocRel, base).href;
+        let tocUrl = dom.querySelector(".book-op > tbody tr td:nth-child(2) a").href;
 
         let tocDom = (await HttpClient.wrapFetch(tocUrl)).responseXML;
 
@@ -202,10 +201,6 @@ class _69shuTwParser extends ShuParser {
         return authorLabel?.textContent ?? super.extractAuthor(dom);
     }
 
-    extractLanguage(dom) {
-        return dom.querySelector("html").getAttribute("lang");
-    }
-
     extractSubject(dom) {
         let tags = [...dom.querySelectorAll(".book-tags a")];
         return tags.map(e => e.textContent.trim()).join(", ");
@@ -220,6 +215,6 @@ class _69shuTwParser extends ShuParser {
     }
     
     findCoverImageUrl(dom) {
-        return util.getFirstImgSrc(dom, ".bookinfo table tbody tr td");
+        return util.getFirstImgSrc(dom, ".bookinfo");
     }
 }
