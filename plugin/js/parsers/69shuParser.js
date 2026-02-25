@@ -168,7 +168,16 @@ class _69shuTwParser extends ShuParser {
         for (let pageUrl of pageUrls) {
             let pageDom = (await HttpClient.wrapFetch(pageUrl)).responseXML;
 
-            let links = [...pageDom.querySelectorAll(".last9 li:not(.title) a")];
+            let nodes = [...pageDom.querySelectorAll(".last9 li:not(.title) :is(a, span.protected-chapter-link)")];
+
+            let links = nodes.map(el => {
+                if (el.tagName === "A") return el;
+
+                let a = pageDom.createElement("a");
+                a.href = new URL(el.dataset.cidUrl, base).href;
+                a.textContent = el.textContent.trim();
+                return a;
+            });
 
             chapters.push(...links.map(a => util.hyperLinkToChapter(a)));
         }
