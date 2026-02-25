@@ -4,6 +4,7 @@ parserFactory.registerUrlRule(
     url => (util.extractHostName(url).includes("69shu")),
     () => new ShuParser()
 );
+parserFactory.register("69shuba.tw", () => new _69shuTwParser());
 parserFactory.registerDeadSite("69yuedu.net", () => new _69yueduParser());
 
 class ShuParser extends Parser {
@@ -147,4 +148,36 @@ function wrapTextNodesInParagraphs(content) {
         p.textContent = node.textContent || "";
         node.parentNode.replaceChild(p, node);
     });
+}
+
+class _69shuTwParser extends ShuParser {
+
+    async getChapterUrls(dom) {
+        // We need to access the href value from the book page `.book-op > tbody tr td:nth-child(2) a`, 
+        // we then need to add it to our website url `https://69shuba.tw` + `/indexlist/344710/`, 
+        // we then need to get the Toc, grab the list of Toc pages from `#indexselect-top` get the values from the options and add it to our base website url `https://69shuba.tw` + `/indexlist/344710/`, 
+        // we then need to move through all the Toc pages and grab the list of chapters under `.last9 li` without including `.title`, 
+        // and then build their urls too `/read/344710/1368690`.   
+        let base = "https://69shuba.tw";
+        
+        let tocRel = dom.querySelector(".book-op > tbody tr td:nth-child(2) a").getAttribute("href");
+        let tocUrl = new URL(tocRel, base).href;
+
+        let tocDom = (await HttpClient.wrapFetch(tocUrl)).responseXML;
+
+        let pageUrls = [...tocDom.querySelectorAll("#indexselect-top option")]
+            .map(o => new URL(o.value, base).href);
+
+        let chapters = [];
+
+        for (let pageUrl of pageUrls) {
+            let pageDom = (await HttpClient.wrapFetch(pageUrl)).responseXML;
+
+            let links = [...pageDom.querySelectorAll(".last9 li:not(.title) a")];
+
+            chapters.push(...links.map(a => util.hyperLinkToChapter(a)));
+        }
+
+        return chapters;
+    }
 }
