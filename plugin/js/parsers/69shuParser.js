@@ -153,11 +153,6 @@ function wrapTextNodesInParagraphs(content) {
 class _69shuTwParser extends ShuParser {
 
     async getChapterUrls(dom) {
-        // We need to access the href value from the book page `.book-op > tbody tr td:nth-child(2) a`, 
-        // we then need to add it to our website url `https://69shuba.tw` + `/indexlist/344710/`, 
-        // we then need to get the Toc, grab the list of Toc pages from `#indexselect-top` get the values from the options and add it to our base website url `https://69shuba.tw` + `/indexlist/344710/`, 
-        // we then need to move through all the Toc pages and grab the list of chapters under `.last9 li` without including `.title`, 
-        // and then build their urls too `/read/344710/1368690`.   
         let base = "https://69shuba.tw";
         
         let tocRel = dom.querySelector(".book-op > tbody tr td:nth-child(2) a").getAttribute("href");
@@ -180,4 +175,34 @@ class _69shuTwParser extends ShuParser {
 
         return chapters;
     }
+
+    findContent(dom) {
+        return dom.querySelector("#nr1");
+    }
+
+    extractTitleImpl(dom) {
+        return dom.querySelector(".info h1");
+    }
+
+    extractAuthor(dom) {
+        let authorLabel = dom.querySelector(".info p:nth-child(2) a");
+        return authorLabel?.textContent ?? super.extractAuthor(dom);
+    }
+
+    extractLanguage(dom) {
+        return dom.querySelector("html").getAttribute("lang");
+    }
+
+    extractSubject(dom) {
+        let tags = [...dom.querySelectorAll(".book-tags a")];
+        return tags.map(e => e.textContent.trim()).join(", ");
+    }
+
+    extractDescription(dom) {
+        return dom.querySelector(".intro p").textContent.trim();
+    }
+
+    findChapterTitle(dom) {
+        return dom.querySelector("#nr_title");
+    }   
 }
