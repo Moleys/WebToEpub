@@ -185,6 +185,10 @@ class _69shuTwParser extends ShuParser {
         return chapters;
     }
 
+    async fetchChapter(url) {
+        return (await HttpClient.wrapFetch(url)).responseXML;
+    }
+
     findContent(dom) {
         return dom.querySelector("#nr1");
     }
