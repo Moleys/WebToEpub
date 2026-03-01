@@ -179,8 +179,8 @@ var main = (function () {
         replaceLibAddToLibrary();
         let overwriteExisting = userPreferences.overwriteExistingEpub.value;
         let backgroundDownload = userPreferences.noDownloadPopup.value;
-        let epubFileName = Download.CustomFilename();
-        let baseFileName = epubFileName.replace(/\.epub$/i, "");
+        let baseFileName = Download.CustomFilenameBase();
+        let epubFileName = baseFileName + ".epub";
 
         if ("yes" == libclick.dataset.libclick || util.sleepController.signal.aborted) {
             if (epubContent) {
@@ -188,15 +188,15 @@ var main = (function () {
             }
         } else {
             if (epubContent) {
-                await Download.save(epubContent, epubFileName, overwriteExisting, backgroundDownload);
+                Download.saveDirect(epubContent, epubFileName);
             }
             if (wantTxt && textChapters) {
                 let txtResult = TextExporter.exportAsTxt(textChapters, baseFileName);
-                await Download.save(txtResult.blob, txtResult.fileName, overwriteExisting, backgroundDownload);
+                Download.saveDirect(txtResult.blob, txtResult.fileName);
             }
             if (wantTxtZip && textChapters) {
                 let zipResult = await TextExporter.exportAsTxtZip(textChapters, baseFileName);
-                await Download.save(zipResult.blob, zipResult.fileName, overwriteExisting, backgroundDownload);
+                Download.saveDirect(zipResult.blob, zipResult.fileName);
             }
         }
         try {

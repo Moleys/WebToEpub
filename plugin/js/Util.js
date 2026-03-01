@@ -810,7 +810,13 @@ const util = (function () {
     function makeStorageFileName(subdirectory, index, title, extension) {
         if (title) {
             const safeLengthForNameInZip = 200;
-            title = "_" + safeForFileName(title, safeLengthForNameInZip) + ".";
+            // Strip non-ASCII characters for ANSI-safe filenames
+            let ansiTitle = safeForFileName(title, safeLengthForNameInZip)
+                .replace(/[^\x20-\x7E]/g, "")
+                .replace(/\s+/g, "_")
+                .replace(/_+/g, "_")
+                .replace(/^_|_$/g, "");
+            title = ansiTitle ? ("_" + ansiTitle + ".") : ".";
         } else {
             // We don't want issues so just set it to . to prepare for the extension
             title = ".";

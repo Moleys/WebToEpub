@@ -199,8 +199,6 @@ class ShuqiParser extends Parser {
 
     async fetchChapter(url) {
         let text = await HttpClient.fetchText(url);
-        console.log("[ShuqiParser] fetchChapter url", url);
-        console.log("[ShuqiParser] fetchChapter text", text);
         let json = null;
         try {
             json = JSON.parse(text);

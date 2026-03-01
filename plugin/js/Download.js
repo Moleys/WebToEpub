@@ -27,7 +27,7 @@ class Download {
         return false;
     }
 
-    static CustomFilename() {
+    static CustomFilenameBase() {
         let CustomFilename = document.getElementById("CustomFilenameInput").value;
         let title = document.getElementById("titleInput").value;
         let author = document.getElementById("authorInput").value;
@@ -62,7 +62,7 @@ class Download {
         for (const [key, value] of Object.entries(ToReplace)) {
             CustomFilename = CustomFilename.replaceAll(key, value);
         }
-        // Sanitize and truncate to 250 bytes (leaving room for .epub extension)
+        // Sanitize and truncate to 250 bytes (leaving room for extension)
         CustomFilename = util.safeForFileName(CustomFilename, 250);
         if (!CustomFilename || CustomFilename.trim() === "") {
             // Fallback: build {title}_{author}_{start}-{end}
@@ -73,7 +73,11 @@ class Download {
             fallback += "_" + chapterStart + "-" + chapterEnd;
             CustomFilename = util.safeForFileName(fallback, 250);
         }
-        return EpubPacker.addExtensionIfMissing(CustomFilename);
+        return CustomFilename;
+    }
+
+    static CustomFilename() {
+        return EpubPacker.addExtensionIfMissing(Download.CustomFilenameBase());
     }
 
     /** write blob to "Downloads" directory */
@@ -88,6 +92,19 @@ class Download {
         }
         let cleanup = () => { URL.revokeObjectURL(options.url); };
         return Download.saveOn(options, cleanup);
+    }
+
+    /** Save blob using <a download> for reliable filename control */
+    static saveDirect(blob, fileName) {
+        let url = URL.createObjectURL(blob);
+        let link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
     }
 
     static saveOnChrome(options, cleanup) {
