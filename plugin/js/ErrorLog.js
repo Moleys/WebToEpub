@@ -7,6 +7,9 @@ class ErrorLog {
 
     static log(error) {
         ErrorLog.history.push(ErrorLog.getMsgText(error));
+        if (ErrorLog.history.length > ErrorLog.MAX_HISTORY) {
+            ErrorLog.history.splice(0, ErrorLog.history.length - ErrorLog.MAX_HISTORY);
+        }
     }
 
     static showErrorMessage(msg) {
@@ -16,6 +19,10 @@ class ErrorLog {
             return;
         }
         ErrorLog.queue.push(msg);
+        if (ErrorLog.queue.length > ErrorLog.MAX_QUEUE) {
+            // Keep current error (index 0); drop oldest queued entries after it.
+            ErrorLog.queue.splice(1, ErrorLog.queue.length - ErrorLog.MAX_QUEUE);
+        }
         if (1 < ErrorLog.queue.length) {
             return;
         }
@@ -148,3 +155,5 @@ class ErrorLog {
 
 ErrorLog.queue = [];
 ErrorLog.history = [];
+ErrorLog.MAX_HISTORY = 200;
+ErrorLog.MAX_QUEUE = 50;

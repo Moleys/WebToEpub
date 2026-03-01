@@ -190,11 +190,14 @@ class HttpClient {
     }
 
     static fetchJson(url, fetchOptions) {
-        let parser = fetchOptions?.parser;
-        delete fetchOptions?.parser;
+        let requestOptions = (fetchOptions == null) ? undefined : { ...fetchOptions };
+        let parser = requestOptions?.parser;
+        if (requestOptions?.parser !== undefined) {
+            delete requestOptions.parser;
+        }
         let wrapOptions = {
             responseHandler: new FetchJsonResponseHandler(),
-            fetchOptions: fetchOptions,
+            fetchOptions: requestOptions,
             parser: parser
         };
         return HttpClient.wrapFetchImpl(url, wrapOptions);

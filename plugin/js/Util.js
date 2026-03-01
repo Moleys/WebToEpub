@@ -10,6 +10,11 @@
 const util = (function () {
     var sleepController = new AbortController;
 
+    function resetSleepController() {
+        sleepController = new AbortController;
+        return sleepController;
+    }
+
     function sleep(ms) {
         return new Promise(resolve => {
             function finished() {
@@ -1181,7 +1186,9 @@ const util = (function () {
         BLOCK_ELEMENTS: BLOCK_ELEMENTS,
         HEADER_TAGS: HEADER_TAGS,
         sleep: sleep,
-        sleepController: sleepController,
+        get sleepController() { return sleepController; },
+        set sleepController(value) { sleepController = value; },
+        resetSleepController: resetSleepController,
         randomInteger: randomInteger,
         isFirefox: isFirefox,
         extensionVersion: extensionVersion,

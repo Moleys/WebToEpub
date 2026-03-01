@@ -999,26 +999,41 @@ class Library { // eslint-disable-line no-unused-vars
             let zipFileReader = new zip.BlobReader(blobfile);
             let zipReader = new zip.ZipReader(zipFileReader, {useWebWorkers: false});
             let entries = await zipReader.getEntries();
+            let entriesByName = new Map(entries.map((entry) => [entry.filename, entry]));
+            let getEntry = (name) => entriesByName.get(name);
+
             //check export logic version
-            let LibraryVersion = await (await entries.filter((a) => a.filename == "LibraryVersion.txt")[0]).getData(new zip.TextWriter());
+            let libraryVersionEntry = getEntry("LibraryVersion.txt");
+            let LibraryVersion = libraryVersionEntry ? await libraryVersionEntry.getData(new zip.TextWriter()) : null;
             
             if (LibraryVersion == null) {
                 ErrorLog.showErrorMessage("Wrong export version");
                 return;
             }
-            let LibCountEntries = await (await entries.filter((a) => a.filename == "LibraryCountEntries.txt")[0])?.getData(new zip.TextWriter());
+            let libCountEntry = getEntry("LibraryCountEntries.txt");
+            let LibCountEntries = libCountEntry ? await libCountEntry.getData(new zip.TextWriter()) : 0;
             for (let i = 0; i < LibCountEntries; i++) {
+                let coverEntry = getEntry("Library/"+i+"/LibCover");
+                let epubEntry = getEntry("Library/"+i+"/LibEpub");
+                let filenameEntry = getEntry("Library/"+i+"/LibFilename");
+                let storyUrlEntry = getEntry("Library/"+i+"/LibStoryURL");
+                let newChapterCountEntry = getEntry("Library/"+i+"/LibNewChapterCount");
                 chrome.storage.local.set({
-                    ["LibCover" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibCover")[0]).getData(new zip.TextWriter()),
-                    ["LibEpub" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibEpub")[0]).getData(new zip.TextWriter()),
-                    ["LibFilename" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibFilename")[0]).getData(new zip.TextWriter()),
-                    ["LibStoryURL" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibStoryURL")[0]).getData(new zip.TextWriter()),
-                    ["LibNewChapterCount" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibNewChapterCount")[0])?.getData(new zip.TextWriter())??"0"
+                    ["LibCover" + HighestLibEpub]: await coverEntry.getData(new zip.TextWriter()),
+                    ["LibEpub" + HighestLibEpub]: await epubEntry.getData(new zip.TextWriter()),
+                    ["LibFilename" + HighestLibEpub]: await filenameEntry.getData(new zip.TextWriter()),
+                    ["LibStoryURL" + HighestLibEpub]: await storyUrlEntry.getData(new zip.TextWriter()),
+                    ["LibNewChapterCount" + HighestLibEpub]: await newChapterCountEntry?.getData(new zip.TextWriter()) ?? "0"
                 });
                 await Library.LibCreateStorageIDs(HighestLibEpub);
                 HighestLibEpub++;
             }
-            Library.userPreferences.loadReadingListFromJson(JSON.parse( await (await entries.filter((a) => a.filename == "ReadingList.json")[0]).getData(new zip.TextWriter())));
+            let readingListEntry = getEntry("ReadingList.json");
+            if (readingListEntry == null) {
+                ErrorLog.showErrorMessage("Wrong export version");
+                return;
+            }
+            Library.userPreferences.loadReadingListFromJson(JSON.parse(await readingListEntry.getData(new zip.TextWriter())));
             Library.LibRenderSavedEpubs();
         }
     }

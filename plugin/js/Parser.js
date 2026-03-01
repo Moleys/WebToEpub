@@ -58,6 +58,7 @@ class Parser {
         this.state = new ParserState();
         this.imageCollector = imageCollector || new ImageCollector();
         this.userPreferences = null;
+        this.rateLimitChain = Promise.resolve();
     }
 
     copyState(otherParser) {
@@ -776,6 +777,9 @@ class Parser {
     async fetchWebPageContent(webPage) {
         ChapterUrlsUI.showDownloadState(webPage.row, ChapterUrlsUI.DOWNLOAD_STATE_SLEEPING);
         await this.rateLimitDelay();
+        if (util.sleepController.signal.aborted) {
+            return;
+        }
         ChapterUrlsUI.showDownloadState(webPage.row, ChapterUrlsUI.DOWNLOAD_STATE_DOWNLOADING);
         let pageParser = webPage.parser;
         try {
@@ -791,6 +795,9 @@ class Parser {
             }
             return pageParser.fetchImagesUsedInDocument(content, webPage);
         } catch (error) {
+            if (util.sleepController.signal.aborted) {
+                return;
+            }
             if (this.userPreferences.skipChaptersThatFailFetch.value) {
                 ErrorLog.log(error);
                 webPage.error = error;
@@ -956,7 +963,9 @@ class Parser {
 
     async rateLimitDelay() {
         let manualDelayPerChapterValue = this.getRateLimit();
-        await util.sleep(manualDelayPerChapterValue);
+        let next = this.rateLimitChain.then(() => util.sleep(manualDelayPerChapterValue));
+        this.rateLimitChain = next.catch(() => { });
+        await next;
     }
 
     async getChaptersFromAllTocPages(chapters, extractPartialChapterList, urlsOfTocPages, chapterUrlsUI, wrapOptions) {

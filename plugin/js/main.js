@@ -151,74 +151,101 @@ var main = (function () {
         window.workInProgress = true;
         main.getPackEpubButton().disabled = true;
         replaceLibAddToLibrary();
-        parser.onStartCollecting();
-        await parser.fetchContent();
+        let libButtonsToggled = true;
+        let uiRestored = false;
+        let didResetUiOnAbort = false;
 
-        let wantEpub = userPreferences.formatEpub.value;
-        let wantTxt = userPreferences.formatTxt.value;
-        let wantTxtZip = userPreferences.formatTxtZip.value;
-
-        // Create supplier once (it deletes rawDom from webPages)
-        let supplier = parser.epubItemSupplier();
-
-        // Extract text chapters BEFORE packEpub (which deletes DOM nodes)
-        let textChapters = null;
-        if (wantTxt || wantTxtZip) {
-            textChapters = TextExporter.extractTextChapters(supplier.epubItems);
-        }
-
-        let epubContent = null;
-        if (wantEpub) {
-            epubContent = await packEpubFromSupplier(metaInfo, supplier);
-        }
-
-        // Enable button here.  If user cancels save dialog
-        // the promise never returns
-        window.workInProgress = false;
-        main.getPackEpubButton().disabled = false;
-        replaceLibAddToLibrary();
-        let overwriteExisting = userPreferences.overwriteExistingEpub.value;
-        let backgroundDownload = userPreferences.noDownloadPopup.value;
-        let baseFileName = Download.CustomFilenameBase();
-        let epubFileName = baseFileName + ".epub";
-
-        if ("yes" == libclick.dataset.libclick || util.sleepController.signal.aborted) {
-            if (epubContent) {
-                await library.LibAddToLibrary(epubContent, epubFileName, document.getElementById("startingUrlInput").value, overwriteExisting, backgroundDownload);
-            }
-        } else {
-            if (epubContent) {
-                Download.saveDirect(epubContent, epubFileName);
-            }
-            if (wantTxt && textChapters) {
-                let txtResult = TextExporter.exportAsTxt(textChapters, baseFileName);
-                Download.saveDirect(txtResult.blob, txtResult.fileName);
-            }
-            if (wantTxtZip && textChapters) {
-                let zipResult = await TextExporter.exportAsTxtZip(textChapters, baseFileName);
-                Download.saveDirect(zipResult.blob, zipResult.fileName);
-            }
-        }
         try {
-            parser.updateReadingList();
-            if (util.sleepController.signal.aborted) {
-                util.sleepController = new AbortController;
-                resetUI();
+            parser.onStartCollecting();
+            await parser.fetchContent();
+
+            let wantEpub = userPreferences.formatEpub.value;
+            let wantTxt = userPreferences.formatTxt.value;
+            let wantTxtZip = userPreferences.formatTxtZip.value;
+
+            // Create supplier once (it deletes rawDom from webPages)
+            let supplier = parser.epubItemSupplier();
+
+            // Extract text chapters BEFORE packEpub (which deletes DOM nodes)
+            let textChapters = null;
+            if (wantTxt || wantTxtZip) {
+                textChapters = TextExporter.extractTextChapters(supplier.epubItems);
             }
-            if (libclick.dataset.libsuppressErrorLog == true) {
-                return;
-            } else {
-                ErrorLog.showLogToUser();
-                dumpErrorLogToFile();
+
+            let epubContent = null;
+            if (wantEpub) {
+                epubContent = await packEpubFromSupplier(metaInfo, supplier);
             }
-        } catch (err) {
+
+            // Enable button here.  If user cancels save dialog
+            // the promise never returns
             window.workInProgress = false;
             main.getPackEpubButton().disabled = false;
-            if (util.sleepController.signal.aborted) {
-                util.sleepController = new AbortController;
+            if (libButtonsToggled) {
+                replaceLibAddToLibrary();
+                libButtonsToggled = false;
             }
-            replaceLibAddToLibrary();
-            ErrorLog.showErrorMessage(err);
+            uiRestored = true;
+
+            let overwriteExisting = userPreferences.overwriteExistingEpub.value;
+            let backgroundDownload = userPreferences.noDownloadPopup.value;
+            let baseFileName = Download.CustomFilenameBase();
+            let epubFileName = baseFileName + ".epub";
+
+            if ("yes" == libclick.dataset.libclick || util.sleepController.signal.aborted) {
+                if (epubContent) {
+                    await library.LibAddToLibrary(epubContent, epubFileName, document.getElementById("startingUrlInput").value, overwriteExisting, backgroundDownload);
+                }
+            } else {
+                if (epubContent) {
+                    Download.saveDirect(epubContent, epubFileName);
+                }
+                if (wantTxt && textChapters) {
+                    let txtResult = TextExporter.exportAsTxt(textChapters, baseFileName);
+                    Download.saveDirect(txtResult.blob, txtResult.fileName);
+                }
+                if (wantTxtZip && textChapters) {
+                    let zipResult = await TextExporter.exportAsTxtZip(textChapters, baseFileName);
+                    Download.saveDirect(zipResult.blob, zipResult.fileName);
+                }
+            }
+            try {
+                parser.updateReadingList();
+                if (util.sleepController.signal.aborted) {
+                    util.resetSleepController();
+                    resetUI();
+                    didResetUiOnAbort = true;
+                    uiRestored = true;
+                    libButtonsToggled = false;
+                }
+                if (libclick.dataset.libsuppressErrorLog == true) {
+                    return;
+                } else {
+                    ErrorLog.showLogToUser();
+                    dumpErrorLogToFile();
+                }
+            } catch (err) {
+                if (!util.sleepController.signal.aborted) {
+                    ErrorLog.showErrorMessage(err);
+                }
+            }
+        } catch (err) {
+            if (!util.sleepController.signal.aborted) {
+                ErrorLog.showErrorMessage(err);
+            }
+        } finally {
+            if (!uiRestored && !didResetUiOnAbort) {
+                window.workInProgress = false;
+                main.getPackEpubButton().disabled = false;
+                if (libButtonsToggled) {
+                    replaceLibAddToLibrary();
+                    libButtonsToggled = false;
+                }
+            }
+            if (util.sleepController.signal.aborted && !didResetUiOnAbort) {
+                util.resetSleepController();
+                resetUI();
+            }
         }
     }
 
