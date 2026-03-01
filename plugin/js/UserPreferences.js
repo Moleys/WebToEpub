@@ -129,6 +129,9 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         this.disableShiftClickAlert = this.addPreference("disableShiftClickAlert", "disableShiftClickAlertCheckbox", false);
         this.disableImageResError = this.addPreference("disableImageResError", "disableImageResErrorCheckbox", false);
         this.disableWebpImageFormatError = this.addPreference("disableWebpImageFormatError", "disableWebpImageFormatErrorCheckbox", false);
+        this.formatEpub = this.addPreference("formatEpub", "formatEpubCheckbox", true);
+        this.formatTxt = this.addPreference("formatTxt", "formatTxtCheckbox", false);
+        this.formatTxtZip = this.addPreference("formatTxtZip", "formatTxtZipCheckbox", false);
 
         document.getElementById("themeColorTag").addEventListener("change", UserPreferences.SetTheme);
     }
