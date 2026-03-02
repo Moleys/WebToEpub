@@ -46,12 +46,20 @@ class ParserFactory {
         this.register(hostName, constructor);
     }
 
+    hasParserForHost(hostName) {
+        return this.parsers.get(ParserFactory.stripLeadingWww(hostName)) != null;
+    }
+
     reregister(hostName, constructor) {
         this.parsers.set(ParserFactory.stripLeadingWww(hostName), constructor);
     }
 
     registerManualSelect(name, constructor) {
         this.manualSelection.push({name, constructor});
+    }
+
+    hasManualSelection(parserName) {
+        return this.manualSelection.some(m => m.name === parserName);
     }
 
     /*
@@ -68,6 +76,28 @@ class ParserFactory {
     */
     registerUrlRule(test, constructor) {
         this.parserUrlRules.push( {test: test, constructor: constructor } );
+    }
+
+    hasParserForUrl(url) {
+        let hostName = ParserFactory.hostNameForParserSelection(url);
+        if (this.parsers.get(hostName) !== undefined) {
+            return true;
+        }
+        for (let pair of this.parserUrlRules) {
+            if (pair.test(url)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    hasParserRuleForDom(url, dom) {
+        for (let pair of this.parserRules) {
+            if ((pair.test(url, dom) * 1.0) > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     fetchByUrl(url) {
@@ -159,9 +189,15 @@ class ParserFactory {
 
     async assignParserToPages(webPages, initialParser) {
         let url = webPages[0].sourceUrl;
+        if ((typeof parserSupportLoader !== "undefined") && (parserSupportLoader != null)) {
+            await parserSupportLoader.ensureForUrl(url, null);
+        }
         let parser = this.fetchByUrl(url);
         if (parser == null) {
             let responseXML = (await HttpClient.wrapFetch(url)).responseXML;
+            if ((typeof parserSupportLoader !== "undefined") && (parserSupportLoader != null)) {
+                await parserSupportLoader.ensureForUrl(url, responseXML);
+            }
             parser = parserFactory.fetch(url, responseXML);
         }
         ParserFactory.copyParserToPages(parser, webPages, initialParser);

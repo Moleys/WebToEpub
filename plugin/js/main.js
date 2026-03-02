@@ -13,7 +13,7 @@ var main = (function () {
             util.log(message);
             // convert the string returned from content script back into a DOM
             let dom = new DOMParser().parseFromString(message.document, "text/html");
-            populateControlsWithDom(message.url, dom);
+            runAsyncSafely(() => populateControlsWithDom(message.url, dom));
         }
     }
 
@@ -22,6 +22,14 @@ var main = (function () {
     let parser = null;
     let userPreferences = null;
     let library = new Library;
+
+    function runAsyncSafely(action) {
+        Promise.resolve()
+            .then(action)
+            .catch((error) => {
+            ErrorLog.showErrorMessage(error);
+        });
+    }
 
     // register listener that is invoked when script injected into HTML sends its results
     function addMessageListener() {
@@ -37,7 +45,7 @@ var main = (function () {
 
     // extract urls from DOM and populate control
     async function processInitialHtml(url, dom) {
-        if (setParser(url, dom)) {
+        if (await setParser(url, dom)) {
             try {
                 userPreferences.addObserver(parser);
             } catch (error) {
@@ -315,9 +323,16 @@ var main = (function () {
         }
     }
 
-    function populateControls() {
+    async function populateControls() {
+        if ((typeof parserSupportLoader !== "undefined") && (parserSupportLoader != null)) {
+            await parserSupportLoader.ensurePreloaded();
+        }
         loadUserPreferences();
-        parserFactory.populateManualParserSelectionTag(getManuallySelectParserTag());
+        if ((typeof parserSupportLoader !== "undefined") && (parserSupportLoader != null)) {
+            parserSupportLoader.populateManualSelect(getManuallySelectParserTag());
+        } else {
+            parserFactory.populateManualParserSelectionTag(getManuallySelectParserTag());
+        }
         configureForTabMode();
     }
 
@@ -347,11 +362,17 @@ var main = (function () {
         }
     }
 
-    function setParser(url, dom) {
+    async function setParser(url, dom) {
         let manualSelect = getManuallySelectParserTag().value;
         if (util.isNullOrEmpty(manualSelect)) {
+            if ((typeof parserSupportLoader !== "undefined") && (parserSupportLoader != null)) {
+                await parserSupportLoader.ensureForUrl(url, dom);
+            }
             parser = parserFactory.fetch(url, dom);
         } else {
+            if ((typeof parserSupportLoader !== "undefined") && (parserSupportLoader != null)) {
+                await parserSupportLoader.ensureForManual(manualSelect);
+            }
             parser = parserFactory.manuallySelectParser(manualSelect);
         }
         if (parser === undefined) {
@@ -524,7 +545,7 @@ var main = (function () {
     }
 
     function onReadOptionsFromFile(event) {
-        userPreferences.readFromFile(event, populateControls);
+        userPreferences.readFromFile(event, () => runAsyncSafely(populateControls));
     }
 
     function onReadingListCheckboxClicked() {
@@ -585,8 +606,8 @@ var main = (function () {
     function addEventHandlers() {
         getPackEpubButton().onclick = fetchContentAndPackEpub;
         document.getElementById("diagnosticsCheckBoxInput").onclick = onDiagnosticsClick;
-        document.getElementById("reloadButton").onclick = populateControls;
-        getManuallySelectParserTag().onchange = populateControls;
+        document.getElementById("reloadButton").onclick = () => runAsyncSafely(populateControls);
+        getManuallySelectParserTag().onchange = () => runAsyncSafely(populateControls);
         document.getElementById("advancedOptionsButton").onclick = onAdvancedOptionsClick;
         document.getElementById("hiddenBibButton").onclick = onLibraryClick;
         document.getElementById("ShowMoreMetadataOptionsCheckbox").addEventListener("change", () => onShowMoreMetadataOptionsClick());
@@ -681,19 +702,23 @@ var main = (function () {
 
     // actions to do when window opened
     window.onload = async () => {
-        userPreferences = UserPreferences.readFromLocalStorage();
-        if (isRunningInTabMode()) {
-            ErrorLog.SuppressErrorLog = false;
-            localizeHtmlPage();
-            getAdvancedOptionsSection().hidden = !userPreferences.advancedOptionsVisibleByDefault.value;
-            getAdditionalMetadataSection().hidden = !userPreferences.ShowMoreMetadataOptions.value;
-            addEventHandlers();
-            populateControls();
-            if (util.isFirefox()) {
-                Firefox.startWebRequestListeners();
+        try {
+            userPreferences = UserPreferences.readFromLocalStorage();
+            if (isRunningInTabMode()) {
+                ErrorLog.SuppressErrorLog = false;
+                localizeHtmlPage();
+                getAdvancedOptionsSection().hidden = !userPreferences.advancedOptionsVisibleByDefault.value;
+                getAdditionalMetadataSection().hidden = !userPreferences.ShowMoreMetadataOptions.value;
+                addEventHandlers();
+                await populateControls();
+                if (util.isFirefox()) {
+                    Firefox.startWebRequestListeners();
+                }
+            } else {
+                await openTabWindow();
             }
-        } else {
-            await openTabWindow();
+        } catch (error) {
+            ErrorLog.showErrorMessage(error);
         }
     };
 

@@ -4,6 +4,8 @@
 var fs = require("fs");
 var zipjs = require("../node_modules/@zip.js/zip.js/index.cjs");
 var DOMParser = require("@xmldom/xmldom").DOMParser;
+var parserSupportIndexPath = "../plugin/js/ParserSupported.json";
+var parserSupportIndexPromise = null;
 
 var extractFileListFromHtml = function(htmlAsString) {
     let dom = new DOMParser().parseFromString(htmlAsString, "text/html");
@@ -17,6 +19,76 @@ var extractFileListFromHtml = function(htmlAsString) {
 var getFileList = function(fileName) {
     return readFilePromise(fileName).then(function(data) {
         return extractFileListFromHtml(data.toString());
+    });
+};
+
+var getParserSupportIndex = function() {
+    if (parserSupportIndexPromise != null) {
+        return parserSupportIndexPromise;
+    }
+    parserSupportIndexPromise = readFilePromise(parserSupportIndexPath)
+        .then(function(data) {
+            return JSON.parse(data.toString());
+        }).catch(function() {
+            return null;
+        });
+    return parserSupportIndexPromise;
+};
+
+var getParserFilesFromSupportedIndex = function() {
+    return getParserSupportIndex().then(function(parsed) {
+        if (parsed == null) {
+            return [];
+        }
+        let parserFiles = new Set();
+        let addParserFile = function(path) {
+            if ((typeof path === "string") && path.startsWith("js/parsers/")) {
+                parserFiles.add(path);
+            }
+        };
+
+        for (let entry of (parsed.supported || [])) {
+            addParserFile(entry && entry.js);
+        }
+        for (let path of (parsed.preloadedFiles || [])) {
+            addParserFile(path);
+        }
+        for (let path of Object.values(parsed.manualNameToFile || {})) {
+            addParserFile(path);
+        }
+
+        let stack = [...parserFiles];
+        while (stack.length !== 0) {
+            let path = stack.pop();
+            let meta = (parsed.fileMeta || {})[path];
+            if (!meta) {
+                continue;
+            }
+            for (let dep of (meta.dependsOn || [])) {
+                if ((typeof dep !== "string") || !dep.startsWith("js/parsers/")) {
+                    continue;
+                }
+                if (!parserFiles.has(dep)) {
+                    parserFiles.add(dep);
+                    stack.push(dep);
+                }
+            }
+        }
+
+        let ordered = [];
+        let seen = new Set();
+        for (let path of (parsed.scriptOrder || [])) {
+            if (parserFiles.has(path)) {
+                ordered.push(path);
+                seen.add(path);
+            }
+        }
+        for (let path of [...parserFiles].sort()) {
+            if (!seen.has(path)) {
+                ordered.push(path);
+            }
+        }
+        return ordered;
     });
 };
 
@@ -83,8 +155,13 @@ var makeIndexLine = function(fileName, startIndex, count) {
 // just run eslint against packed.js
 
 var loadedFiles = [];
-getFileList("../plugin/popup.html").then(function(fileList) {
-    fileList =  adjustedFileListForEslint(fileList);
+Promise.all([
+    getFileList("../plugin/popup.html"),
+    getParserFilesFromSupportedIndex()
+]).then(function(results) {
+    let fileList = results[0].concat(results[1]);
+    fileList = [...new Set(fileList)];
+    fileList = adjustedFileListForEslint(fileList);
     console.log(fileList);
     return readAllFiles(fileList, loadedFiles);
 }).then(function() {
@@ -192,11 +269,15 @@ var packNonManifestExtensionFiles = function(zip, packedFileName) {
         }).then(function() {
             return getFileList("../plugin/popup.html");
         }).then(function(fileList) {
-            return getLocaleFilesNames().then(function(localeNames) {
-                return ["js/ContentScript.js"].concat(localeNames)
+            return Promise.all([getLocaleFilesNames(), getParserFilesFromSupportedIndex()]).then(function(results) {
+                let localeNames = results[0];
+                let parserFiles = results[1];
+                return ["js/ContentScript.js", "js/background.js", "js/ParserSupported.json"].concat(localeNames)
+                    .concat(parserFiles)
                     .concat(fileList.filter(n => !n.includes("/experimental/")));
             });
         }).then(function(fileList) {
+            fileList = [...new Set(fileList)];
             return addFilesToZip(zip, fileList);
         }).then(function() {
             return addPopupHtmlToZip(zip);
@@ -227,6 +308,13 @@ var makeManifestForFirefox = function(data) {
     // rename action => browser_action
     manifest.browser_action = manifest.action;
     delete manifest.action;
+
+    if (manifest.background && manifest.background.service_worker) {
+        manifest.background = {
+            scripts: [manifest.background.service_worker],
+            persistent: false
+        };
+    }
     return manifest;    
 };
 

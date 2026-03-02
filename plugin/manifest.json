@@ -44,6 +44,9 @@
     "default_icon": "book128.png",
     "default_popup": "popup.html"
   },
+  "background": {
+    "service_worker": "js/background.js"
+  },
   "incognito": "split",
   "browser_specific_settings": {
     "gecko": {
