@@ -65,20 +65,31 @@ class NovelDownloaderWwwTaduComParser extends Parser {
         if (!jsonpText) {
             return chapterDom;
         }
-        let contentObj = null;
+        let payload = null;
         try {
-            let getContentObj = new Function("function callback(obj) { return obj; } return " + jsonpText + ";");
-            contentObj = getContentObj();
+            payload = this.parseContentPayload(jsonpText);
         } catch (error) {
             ErrorLog.log(error);
             return chapterDom;
         }
-        if (!contentObj || !contentObj.content) {
+        let content = payload?.data?.content || payload?.content;
+        if (!content) {
             return chapterDom;
         }
         let newDoc = Parser.makeEmptyDocForContent(url);
-        newDoc.content.innerHTML = contentObj.content;
+        newDoc.content.innerHTML = content;
         return newDoc.dom;
+    }
+
+    parseContentPayload(text) {
+        try {
+            return JSON.parse(text);
+        } catch {
+            // fall back to JSONP payloads used by older endpoint variants
+        }
+        return util.locateAndExtractJson(text, "callback(")
+            || util.locateAndExtractJson(text, "callback (")
+            || util.locateAndExtractJson(text, "jQuery");
     }
 
     findChapterTitle(dom, webPage) {

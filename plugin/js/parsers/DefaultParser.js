@@ -31,6 +31,15 @@ class DefaultParser extends Parser {
         DefaultParserUI.setupDefaultParserUI(hostname, this);
     }
 
+    async fetchChapter(url) {
+        let hostname = util.extractHostName(url);
+        let config = this.siteConfigs.getConfigForSite(hostname);
+        if (config?.useIframe) {
+            return HttpClient.fetchIframeDom(url, { timeoutMs: 45000 });
+        }
+        return super.fetchChapter(url);
+    }
+
     // override default (keep nearly everything, may be wanted)
     removeUnwantedElementsFromContentElement(element) {
         util.removeElements(element.querySelectorAll("script[src], iframe"));

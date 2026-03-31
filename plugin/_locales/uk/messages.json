@@ -467,5 +467,9 @@
 			    "content": "$1"
 			}
 		}
+	},
+	"__MSG_label_Default_Parser_Use_Iframe__": {
+		"message": "Load chapter using iframe",
+		"description": "Label for checkbox to load default parser chapter pages through an iframe"
 	}
 }

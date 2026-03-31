@@ -18,21 +18,7 @@
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
-      "matches": [
-        "https://book.qidian.com/*",
-        "https://www.qidian.com/*",
-        "https://book.qq.com/*",
-        "https://read.zongheng.com/*",
-        "https://book.zongheng.com/*",
-        "https://huayu.zongheng.com/*",
-        "https://www.zongheng.com/*",
-        "https://fanqienovel.com/*",
-        "https://www.99csw.com/*",
-        "https://www.kadokado.com.tw/*",
-        "https://www.doufuyuedu.com/*",
-        "https://www.ihuaben.com/*",
-        "https://www.lzdzw.com/*"
-      ],
+      "matches": ["<all_urls>"],
       "js": ["js/IframeContentScript.js"],
       "all_frames": true,
       "run_at": "document_end"

@@ -440,11 +440,16 @@ class ImageCollector {
         if (!imageInfo.mediaType?.startsWith("image")) {
             imageInfo.mediaType = util.detectMimeType(imageInfo.getBase64(25));
             if (imageInfo.mediaType == null) {
-                let path = new URL(imageInfo.sourceUrl).pathname;
-                let index = path.lastIndexOf(".");
-                let format = (index < 0)
-                    ? "jpeg"
-                    : path.substring(index + 1);
+                let format = "jpeg";
+                try {
+                    let path = new URL(imageInfo.sourceUrl).pathname;
+                    let index = path.lastIndexOf(".");
+                    format = (index < 0)
+                        ? "jpeg"
+                        : path.substring(index + 1);
+                } catch {
+                    // keep default format
+                }
                 imageInfo.mediaType = "image/" + format;
             }
         }
@@ -494,8 +499,12 @@ class ImageCollector {
     initialUrlToTry(imageInfo) {
         let urlToTry = imageInfo.sourceUrl;
         if (!util.isNullOrEmpty(imageInfo.wrappingUrl)
-            && !ImageCollector.urlHasFragment(imageInfo.wrappingUrl)) {
+            && !ImageCollector.urlHasFragment(imageInfo.wrappingUrl)
+            && util.isUrl(imageInfo.wrappingUrl)) {
             urlToTry = imageInfo.wrappingUrl;
+        }
+        if (!util.isUrl(urlToTry) && util.isUrl(imageInfo.sourceUrl)) {
+            urlToTry = imageInfo.sourceUrl;
         }
         return ImageCollector.removeSizeParamsFromWordPressQuery(urlToTry);
     }
@@ -509,6 +518,9 @@ class ImageCollector {
     }
 
     static removeSizeParamsFromWordPressQuery(originalUrl) {
+        if (!util.isUrl(originalUrl)) {
+            return originalUrl;
+        }
         let url = new URL(originalUrl);
         let searchParams = url.searchParams;
         if (!util.isNullOrEmpty(searchParams.toString()) &&

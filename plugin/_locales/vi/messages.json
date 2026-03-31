@@ -403,5 +403,9 @@
                 "content": "$1"
             }
         }
+    },
+    "__MSG_label_Default_Parser_Use_Iframe__": {
+        "message": "Tải chương bằng iframe",
+        "description": "Label for checkbox to load default parser chapter pages through an iframe"
     }
 }

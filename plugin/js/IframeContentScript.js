@@ -1,6 +1,6 @@
 "use strict";
 
-(function () {
+(function() {
     if (window.top === window) {
         return;
     }
@@ -83,7 +83,6 @@
     }
 
     function sendResult() {
-        console.log("[IframeContentScript] sendResult for", activeConfig.requestId, "url:", document.URL);
         chrome.runtime.sendMessage({
             messageType: "WteIframeParseResults",
             requestId: activeConfig.requestId,
@@ -94,7 +93,6 @@
     }
 
     function sendError(errorMessage) {
-        console.error("[IframeContentScript] sendError:", errorMessage, "requestId:", activeConfig?.requestId);
         chrome.runtime.sendMessage({
             messageType: "WteIframeFetchError",
             requestId: activeConfig?.requestId || null,
@@ -132,7 +130,6 @@
 
     function parseRequestId() {
         let name = window.name || "";
-        console.log("[IframeContentScript] window.name:", name, "url:", document.URL);
         if (name.startsWith("wte-iframe:")) {
             return name.substring("wte-iframe:".length);
         }
@@ -143,7 +140,6 @@
         if (message?.messageType !== "WteIframeConfig") {
             return;
         }
-        console.log("[IframeContentScript] Config received, requestId:", message.requestId, "options:", JSON.stringify(message.options));
         if (!message.requestId || (activeConfig && activeConfig.requestId !== message.requestId)) {
             return;
         }
@@ -157,10 +153,8 @@
     function requestConfig() {
         let requestId = parseRequestId();
         if (!requestId) {
-            console.log("[IframeContentScript] No requestId in window.name, exiting");
             return;
         }
-        console.log("[IframeContentScript] Sending WteIframeReady, requestId:", requestId);
         chrome.runtime.sendMessage({
             messageType: "WteIframeReady",
             requestId: requestId,

@@ -25,14 +25,15 @@ class DefaultParserSiteSettings {
             && !util.isNullOrEmpty(selectors.contentCss);
     }
 
-    saveSiteConfig(hostname, contentCss, titleCss, removeCss, testUrl) {
-        if (this.isConfigChanged(hostname, contentCss, titleCss, removeCss, testUrl)) {
+    saveSiteConfig(hostname, contentCss, titleCss, removeCss, testUrl, useIframe) {
+        if (this.isConfigChanged(hostname, contentCss, titleCss, removeCss, testUrl, useIframe)) {
             this.configs.set(
                 hostname, { 
                     contentCss: contentCss, 
                     titleCss: titleCss, 
                     removeCss: removeCss,
-                    testUrl: testUrl 
+                    testUrl: testUrl,
+                    useIframe: useIframe
                 }
             );
             let serialized = JSON.stringify(Array.from(this.configs.entries()));
@@ -41,13 +42,14 @@ class DefaultParserSiteSettings {
     }
 
     /** @private */
-    isConfigChanged(hostname, contentCss, titleCss, removeCss, testUrl) {
+    isConfigChanged(hostname, contentCss, titleCss, removeCss, testUrl, useIframe) {
         let config = this.configs.get(hostname);
         return (config === undefined) || 
             (contentCss !== config.contentCss) ||
             (titleCss !== config.titleCss) || 
             (removeCss !== config.removeCss) ||
-            (testUrl !== config.testUrl);
+            (testUrl !== config.testUrl) ||
+            (useIframe !== !!config.useIframe);
     }
 
     getConfigForSite(hostname) {
@@ -105,8 +107,9 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
         let titleCss = DefaultParserUI.getChapterTitleCssInput().value;
         let removeCss = DefaultParserUI.getUnwantedElementsCssInput().value.trim();
         let testUrl = DefaultParserUI.getTestChapterUrlInput().value.trim();
+        let useIframe = DefaultParserUI.getUseIframeCheckbox().checked;
 
-        parser.siteConfigs.saveSiteConfig(hostname, contentCss, titleCss, removeCss, testUrl);
+        parser.siteConfigs.saveSiteConfig(hostname, contentCss, titleCss, removeCss, testUrl, useIframe);
     }
 
     static populateDefaultParserUI(hostname, parser) {
@@ -116,6 +119,7 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
         DefaultParserUI.getChapterTitleCssInput().value = "";
         DefaultParserUI.getUnwantedElementsCssInput().value = "";
         DefaultParserUI.getTestChapterUrlInput().value = "";
+        DefaultParserUI.getUseIframeCheckbox().checked = false;
 
         let config = parser.siteConfigs.getConfigForSite(hostname);
         if (config != null) {
@@ -123,6 +127,7 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
             DefaultParserUI.getChapterTitleCssInput().value = config.titleCss;
             DefaultParserUI.getUnwantedElementsCssInput().value = config.removeCss;
             DefaultParserUI.getTestChapterUrlInput().value = config.testUrl;
+            DefaultParserUI.getUseIframeCheckbox().checked = !!config.useIframe;
         }
     }
 
@@ -147,8 +152,8 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
             return;
         }
         try {
-            let xhr = await HttpClient.wrapFetch(config.testUrl);
-            let webPage = { rawDom: util.sanitize(xhr.responseXML.querySelector("*")) };
+            let chapterDom = await parser.fetchChapter(config.testUrl);
+            let webPage = { rawDom: util.sanitize(chapterDom.querySelector("*")) };
             let content = parser.findContent(webPage.rawDom);
             if (content === null) {
                 let errorMsg = UIText.Error.errorContentNotFound(config.testUrl);
@@ -201,6 +206,10 @@ class DefaultParserUI { // eslint-disable-line no-unused-vars
 
     static getTestChapterUrlInput() {
         return document.getElementById("defaultParserTestChapterUrl");
+    }
+
+    static getUseIframeCheckbox() {
+        return document.getElementById("defaultParserUseIframeCheckbox");
     }
 
     static getResultViewElement() {
